@@ -22,7 +22,7 @@ RUN apt-get update \
 
 # MSRV (1.88) stays the default toolchain; add stable for the test matrix.
 RUN rustup component add rustfmt clippy \
-    && rustup toolchain install stable --profile minimal --component rustfmt clippy
+    && rustup toolchain install stable --profile minimal --component rustfmt --component clippy
 
 ARG SCCACHE_VERSION=v0.8.2
 RUN curl -fsSL "https://github.com/mozilla/sccache/releases/download/${SCCACHE_VERSION}/sccache-${SCCACHE_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
