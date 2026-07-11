@@ -5,17 +5,19 @@
 [![pipeline](https://gitlab.com/zornfeuer/grafana-plugin-sdk-rs/badges/main/pipeline.svg)](https://gitlab.com/zornfeuer/grafana-plugin-sdk-rs/-/pipelines)
 [![license](https://img.shields.io/crates/l/grafana-plugin-sdk-rs.svg)](#license)
 
-A lean, protocol-first SDK for building [Grafana backend plugins][backend-plugins] in Rust.
+A modern Rust SDK for building [Grafana backend plugins][backend-plugins] —
+`CheckHealth`, `CallResource`, `QueryData`, `QueryChunkedData`, Grafana Live
+streaming, automatic mTLS, admission/conversion, and more.
 
 Grafana talks to backend plugins as a [go-plugin] subprocess over gRPC
 (`pluginv2`). This crate implements that protocol — including go-plugin's
 automatic mTLS — so you can write the plugin backend entirely in Rust, with no Go
 in the stack.
 
-> **Status:** early development (`0.x`). A fork of Ben Sully's
-> [`grafana-plugin-sdk-rust`][upstream], re-focused on a small, dependency-light
-> core and extended with an `axum` resource adapter, automatic mTLS, instance
-> management and more. APIs may change before `1.0`.
+> **Status:** early development (`0.x`). Protocol-first and dependency-lean by
+> default — the core build pulls in no Apache Arrow — with an `axum` resource
+> adapter, automatic mTLS, instance management, and admission/conversion
+> services on top. APIs may change before `1.0`.
 >
 > **Repositories:** the canonical repository is on
 > [GitLab](https://gitlab.com/zornfeuer/grafana-plugin-sdk-rs); the
@@ -99,11 +101,19 @@ Working towards feature parity with the Go SDK, roughly in priority order:
 
 Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## History
+
+This crate began as a fork of Ben Sully's [`grafana-plugin-sdk-rust`][upstream]
+and has since diverged substantially: a re-focused, feature-gated lean core, an
+`axum` resource adapter, automatic mTLS, instance management, admission and
+conversion services, and a protocol synced against the current `pluginv2`. It's
+developed independently from here — see [NOTICE](NOTICE) for attribution of the
+original code it's derived from.
+
 ## License
 
 Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or
-[MIT license](LICENSE-MIT) at your option. See [NOTICE](NOTICE) for attribution
-of the upstream project this fork is derived from.
+[MIT license](LICENSE-MIT) at your option.
 
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in this crate by you, as defined in the Apache-2.0 license, shall be

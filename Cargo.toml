@@ -15,5 +15,5 @@ authors = [
 ]
 repository = "https://gitlab.com/zornfeuer/grafana-plugin-sdk-rs"
 homepage = "https://gitlab.com/zornfeuer/grafana-plugin-sdk-rs"
-keywords = ["grafana", "plugin", "sdk", "backend", "grpc"]
+keywords = ["grafana", "plugin", "sdk", "backend", "datasource"]
 categories = ["api-bindings", "web-programming"]
