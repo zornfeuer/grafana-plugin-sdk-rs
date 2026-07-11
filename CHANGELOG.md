@@ -6,6 +6,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-11
+
 ### Added
 
 - Synced the vendored `pluginv2` protobuf to the authoritative upstream version and
@@ -53,5 +55,6 @@ on the surface a resource/health app plugin needs.
 - Forked from [`grafana-plugin-sdk-rust`](https://github.com/grafana/grafana-plugin-sdk-rust)
   by Ben Sully, dual-licensed MIT/Apache-2.0. See [NOTICE](NOTICE).
 
-[Unreleased]: https://gitlab.com/zornfeuer/grafana-plugin-sdk-rs/-/compare/v0.1.0...main
+[Unreleased]: https://gitlab.com/zornfeuer/grafana-plugin-sdk-rs/-/compare/v0.2.0...main
+[0.2.0]: https://gitlab.com/zornfeuer/grafana-plugin-sdk-rs/-/compare/v0.1.0...v0.2.0
 [0.1.0]: https://gitlab.com/zornfeuer/grafana-plugin-sdk-rs/-/tags/v0.1.0
