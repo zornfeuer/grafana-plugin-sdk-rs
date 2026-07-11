@@ -8,6 +8,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Synced the vendored `pluginv2` protobuf to the authoritative upstream version and
+  regenerated the bindings. This surfaces fields the older snapshot was missing:
+  `PluginContext.namespace` (now on the SDK `PluginContext`), a data-frame `format`
+  on `QueryDataRequest`/`DataResponse`, and `headers` on the streaming requests.
 - `Data.QueryChunkedData`: the checked-in `pluginv2` bindings were regenerated to
   add the chunked-query RPC, and the `DataService` gRPC bridge now serves it by
   streaming each Arrow-encoded frame produced by `query_data` as a separate chunk.

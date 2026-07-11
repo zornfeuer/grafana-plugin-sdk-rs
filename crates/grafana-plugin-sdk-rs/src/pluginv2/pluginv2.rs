@@ -17,7 +17,7 @@ pub struct AppInstanceSettings {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DataSourceInstanceSettings {
-    /// Deprecatd: Internal ID, do not use this for anythign important
+    /// Deprecated: Internal ID, do not use this for anythign important
     #[prost(int64, tag = "1")]
     pub id: i64,
     #[prost(string, tag = "2")]
@@ -64,6 +64,7 @@ pub struct User {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PluginContext {
     /// The Grafana organization id the request originates from.
+    /// Deprecated: this value should NOT be used for multi-tenancy isolation in plugins.
     #[prost(int64, tag = "1")]
     pub org_id: i64,
     /// The unique identifier of the plugin the request is targeted for.
@@ -105,6 +106,9 @@ pub struct PluginContext {
     /// The API version that initiated a request
     #[prost(string, tag = "9")]
     pub api_version: ::prost::alloc::string::String,
+    /// The Grafana namespace.
+    #[prost(string, tag = "10")]
+    pub namespace: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct StringList {
@@ -174,6 +178,9 @@ pub struct QueryDataRequest {
     /// List of data queries
     #[prost(message, repeated, tag = "3")]
     pub queries: ::prost::alloc::vec::Vec<DataQuery>,
+    /// The requested response format
+    #[prost(enumeration = "DataFrameFormat", tag = "4")]
+    pub format: i32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QueryDataResponse {
@@ -204,6 +211,9 @@ pub struct DataResponse {
     /// Error source
     #[prost(string, tag = "5")]
     pub error_source: ::prost::alloc::string::String,
+    /// The frame format (default to arrow)
+    #[prost(enumeration = "DataFrameFormat", tag = "6")]
+    pub format: i32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QueryChunkedDataRequest {
@@ -238,12 +248,14 @@ pub struct QueryChunkedDataResponse {
     #[prost(string, tag = "4")]
     pub error: ::prost::alloc::string::String,
     /// When errors exist or a non 2XX status, clients will be passed a 207 HTTP error code in /ds/query
+    /// The status codes should match values from standard HTTP status codes
+    /// If not set explicitly, it will be marshaled to 200 if no error exists, or 500 if one does
     #[prost(int32, tag = "5")]
     pub status: i32,
     /// Error source
     #[prost(string, tag = "6")]
     pub error_source: ::prost::alloc::string::String,
-    /// The frame format (defaults to arrow)
+    /// The frame format (default to arrow)
     #[prost(enumeration = "DataFrameFormat", tag = "7")]
     pub format: i32,
 }
@@ -338,6 +350,12 @@ pub struct SubscribeStreamRequest {
     /// For example, can contain JSON query object.
     #[prost(bytes = "bytes", tag = "3")]
     pub data: ::prost::bytes::Bytes,
+    /// Environment info
+    #[prost(map = "string, string", tag = "4")]
+    pub headers: ::std::collections::HashMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SubscribeStreamResponse {
@@ -403,6 +421,12 @@ pub struct PublishStreamRequest {
     /// (only JSON-encoded at the moment).
     #[prost(bytes = "vec", tag = "3")]
     pub data: ::prost::alloc::vec::Vec<u8>,
+    /// Environment info
+    #[prost(map = "string, string", tag = "4")]
+    pub headers: ::std::collections::HashMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PublishStreamResponse {
@@ -470,6 +494,12 @@ pub struct RunStreamRequest {
     /// For example, can contain JSON query object.
     #[prost(bytes = "bytes", tag = "3")]
     pub data: ::prost::bytes::Bytes,
+    /// Environment info
+    #[prost(map = "string, string", tag = "4")]
+    pub headers: ::std::collections::HashMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct StreamPacket {
@@ -670,13 +700,13 @@ pub struct StatusResult {
     #[prost(int32, tag = "4")]
     pub code: i32,
 }
-/// The encoding used for frames in a chunked query response.
+/// Specify the response bytes format
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum DataFrameFormat {
-    /// Full Arrow schema + data.
+    /// Full arrow schema+data
     Arrow = 0,
-    /// JSON-encoded schema + data.
+    /// JSON Encoded schema+data
     Json = 1,
 }
 impl DataFrameFormat {
@@ -1117,7 +1147,6 @@ pub mod data_client {
             req.extensions_mut().insert(GrpcMethod::new("pluginv2.Data", "QueryData"));
             self.inner.unary(req, path, codec).await
         }
-        /// Query data, streaming the encoded frames back in chunks.
         pub async fn query_chunked_data(
             &mut self,
             request: impl tonic::IntoRequest<super::QueryChunkedDataRequest>,
@@ -1173,7 +1202,6 @@ pub mod data_server {
             >
             + std::marker::Send
             + 'static;
-        /// Query data, streaming the encoded frames back in chunks.
         async fn query_chunked_data(
             &self,
             request: tonic::Request<super::QueryChunkedDataRequest>,

@@ -18,7 +18,7 @@ message AppInstanceSettings {
 }
 
 message DataSourceInstanceSettings {
-  // Deprecatd: Internal ID, do not use this for anythign important
+  // Deprecated: Internal ID, do not use this for anythign important
   int64 id = 1;
   string name = 2;
   string url = 3;
@@ -49,6 +49,7 @@ message User {
 
 message PluginContext {
   // The Grafana organization id the request originates from.
+  // Deprecated: this value should NOT be used for multi-tenancy isolation in plugins.
   int64 orgId = 1;
 
   // The unique identifier of the plugin the request is targeted for.
@@ -84,6 +85,9 @@ message PluginContext {
 
   // The API version that initiated a request
   string apiVersion = 9;
+
+  // The Grafana namespace. 
+  string namespace = 10;
 }
 
 //---------------------------------------------------------
@@ -124,16 +128,14 @@ message CallResourceResponse {
 
 service Data {
   rpc QueryData(QueryDataRequest) returns (QueryDataResponse);
-
-  // Query data, streaming the encoded frames back in chunks.
   rpc QueryChunkedData(QueryChunkedDataRequest) returns (stream QueryChunkedDataResponse);
 }
 
-// The encoding used for frames in a chunked query response.
+// Specify the response bytes format
 enum DataFrameFormat {
-  // Full Arrow schema + data.
+  // Full arrow schema+data
   ARROW = 0;
-  // JSON-encoded schema + data.
+  // JSON Encoded schema+data
   JSON = 1;
 }
 
@@ -160,6 +162,9 @@ message QueryDataRequest {
 
   // List of data queries
   repeated DataQuery queries = 3;
+
+  // The requested response format
+  DataFrameFormat format = 4;
 }
 
 message QueryDataResponse {
@@ -185,6 +190,9 @@ message DataResponse {
 
   // Error source
   string errorSource = 5;
+
+  // The frame format (default to arrow)
+  DataFrameFormat format = 6;
 }
 
 message QueryChunkedDataRequest {
@@ -215,12 +223,14 @@ message QueryChunkedDataResponse {
   string error = 4;
 
   // When errors exist or a non 2XX status, clients will be passed a 207 HTTP error code in /ds/query
+  // The status codes should match values from standard HTTP status codes
+  // If not set explicitly, it will be marshaled to 200 if no error exists, or 500 if one does
   int32 status = 5;
 
   // Error source
   string errorSource = 6;
 
-  // The frame format (defaults to arrow)
+  // The frame format (default to arrow)
   DataFrameFormat format = 7;
 }
 
@@ -296,6 +306,9 @@ message SubscribeStreamRequest {
   // optional raw data. May be used as an extra payload supplied upon subscription.
   // For example, can contain JSON query object.
   bytes data = 3;
+
+  // Environment info
+  map<string,string> headers = 4;
 }
 
 message SubscribeStreamResponse {
@@ -321,6 +334,9 @@ message PublishStreamRequest {
   // data that user wants to publish into a stream
   // (only JSON-encoded at the moment).
   bytes data = 3;
+
+  // Environment info
+  map<string,string> headers = 4;
 }
 
 message PublishStreamResponse {
@@ -348,6 +364,9 @@ message RunStreamRequest {
   // optional raw data. May be used as an extra payload supplied upon subscription.
   // For example, can contain JSON query object.
   bytes data = 3;
+
+  // Environment info
+  map<string,string> headers = 4;
 }
 
 message StreamPacket {
@@ -393,7 +412,7 @@ message AdmissionRequest {
 
   // The requested operation
   Operation operation = 2;
-  
+
   // The object kind
   GroupVersionKind kind = 3;
 
@@ -469,7 +488,7 @@ message RawObject {
   string content_type = 2;
 }
 
-// ConversionRequest supports converting objects from one version to another 
+// ConversionRequest supports converting objects from one version to another
 message ConversionRequest {
   // NOTE: this may not include app or datasource instance settings depending on the request
   PluginContext pluginContext = 1;

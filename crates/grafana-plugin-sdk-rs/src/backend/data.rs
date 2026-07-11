@@ -463,6 +463,7 @@ where
                                 error: e.to_string(),
                                 json_meta: vec![],
                                 error_source: ErrorSource::Plugin.to_string(),
+                                format: pluginv2::DataFrameFormat::Arrow as i32,
                             },
                         )
                     },
@@ -475,6 +476,7 @@ where
                                 error: "".to_string(),
                                 json_meta: vec![],
                                 error_source: "".to_string(),
+                                format: pluginv2::DataFrameFormat::Arrow as i32,
                             },
                         )
                     },
@@ -492,6 +494,7 @@ where
                         error: err_string,
                         json_meta: vec![],
                         error_source: source,
+                        format: pluginv2::DataFrameFormat::Arrow as i32,
                     },
                 )
             }
@@ -522,6 +525,7 @@ where
                 plugin_context: inner.plugin_context,
                 headers: inner.headers,
                 queries: inner.queries,
+                format: inner.format,
             }
             .try_into()
             .map_err(ConvertFromError::into_tonic_status)?,

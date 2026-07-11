@@ -1343,6 +1343,11 @@ where
 
     /// Configuration passed to the plugin from Grafana.
     pub grafana_config: GrafanaConfig,
+
+    /// The Grafana namespace (tenant) the request originates from.
+    ///
+    /// Empty on single-tenant Grafana instances.
+    pub namespace: String,
 }
 
 impl<IS, JsonData, SecureJsonData> TryFrom<pluginv2::PluginContext>
@@ -1367,6 +1372,7 @@ where
             _json_data: PhantomData,
             _secure_json_data: PhantomData,
             grafana_config: GrafanaConfig::new(other.grafana_config),
+            namespace: other.namespace,
         })
     }
 }
