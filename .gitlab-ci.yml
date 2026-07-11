@@ -45,6 +45,15 @@ variables:
 default:
   image: $CI_IMAGE
   interruptible: true
+  # Fail fast on a hung job instead of running to the hour-long default, and
+  # auto-retry the shared-runner flakiness (stuck / system / scheduler failures).
+  timeout: 30m
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+      - scheduler_failure
   cache:
     - <<: *deps_cache
       policy: pull
