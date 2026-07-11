@@ -26,7 +26,7 @@ use base64::Engine as _;
 use rustls::{
     client::danger::HandshakeSignatureValid,
     crypto::WebPkiSupportedAlgorithms,
-    pki_types::{CertificateDer, PrivateKeyDer, UnixTime},
+    pki_types::{pem::PemObject as _, CertificateDer, PrivateKeyDer, UnixTime},
     server::danger::{ClientCertVerified, ClientCertVerifier},
     DigitallySignedStruct, DistinguishedName, ServerConfig, SignatureScheme,
 };
@@ -50,10 +50,7 @@ pub(crate) static SERVER_TLS: OnceLock<Option<Arc<ServerConfig>>> = OnceLock::ne
 pub(crate) enum MtlsError {
     /// The client certificate in `PLUGIN_CLIENT_CERT` could not be parsed.
     #[error("could not parse the client certificate in {CLIENT_CERT_ENV}: {0}")]
-    ClientCert(io::Error),
-    /// The client certificate environment variable did not contain a certificate.
-    #[error("{CLIENT_CERT_ENV} did not contain a certificate")]
-    NoClientCert,
+    ClientCert(rustls::pki_types::pem::Error),
     /// The server certificate could not be generated.
     #[error("could not generate the server certificate: {0}")]
     Generate(#[from] rcgen::Error),
@@ -83,9 +80,7 @@ pub(crate) fn build_server_tls(
     client_cert_pem: &str,
 ) -> Result<(Arc<ServerConfig>, String), MtlsError> {
     // Parse the (single) client certificate that we will pin.
-    let expected = rustls_pemfile::certs(&mut client_cert_pem.as_bytes())
-        .next()
-        .ok_or(MtlsError::NoClientCert)?
+    let expected = CertificateDer::from_pem_slice(client_cert_pem.as_bytes())
         .map_err(MtlsError::ClientCert)?;
 
     // Generate our own ephemeral self-signed server certificate.

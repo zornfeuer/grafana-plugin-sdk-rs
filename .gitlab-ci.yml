@@ -88,6 +88,12 @@ fmt:
 
 clippy:
   stage: ci
+  # Runs on the MSRV toolchain and refreshes the shared caches for the other jobs.
+  cache:
+    - <<: *deps_cache
+      policy: pull-push
+    - <<: *sccache_cache
+      policy: pull-push
   script:
     - cargo clippy --all-targets -- -D warnings
     - cargo clippy --all-targets --features "$FEATURES" -- -D warnings
@@ -99,16 +105,35 @@ test:lean:
     - cargo test -p grafana-plugin-sdk-rs
     - "! cargo tree -p grafana-plugin-sdk-rs | grep -qi arrow"
 
-# The most complete build: also the one that refreshes the shared caches.
-test:features:
+# Full test suite across the MSRV (1.88, the image default) and the latest stable
+# toolchain. Each toolchain keeps its own sccache to avoid a cross-job push race.
+test:
+  stage: ci
+  parallel:
+    matrix:
+      - TOOLCHAIN: ["msrv", "stable"]
+  cache:
+    - <<: *deps_cache
+      policy: pull
+    - key: "sccache-$CI_COMMIT_REF_SLUG-$TOOLCHAIN"
+      paths:
+        - .sccache
+      policy: pull-push
+  script:
+    - if [ "$TOOLCHAIN" = "stable" ]; then rustup default stable; fi
+    - rustc --version
+    - cargo test --workspace --features "$FEATURES"
+
+# Supply-chain audit: security advisories, license policy, banned/duplicate crates,
+# and crate sources. Configured in deny.toml.
+deny:
   stage: ci
   cache:
     - <<: *deps_cache
-      policy: pull-push
-    - <<: *sccache_cache
-      policy: pull-push
+      policy: pull
+  after_script: []
   script:
-    - cargo test --workspace --features "$FEATURES"
+    - cargo deny check
 
 doc:
   stage: ci

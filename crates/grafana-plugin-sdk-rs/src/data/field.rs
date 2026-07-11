@@ -766,7 +766,7 @@ mod tests {
     use std::time::UNIX_EPOCH;
 
     use chrono::prelude::*;
-    use paste::paste;
+    use pastey::paste;
 
     use super::*;
 

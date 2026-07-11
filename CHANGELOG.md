@@ -6,6 +6,17 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Dropped two unmaintained dependencies (flagged by `cargo-deny`): `rustls-pemfile`
+  (the `automtls` PEM parsing now uses `rustls-pki-types`' `PemObject`) and, in
+  tests, `paste` (replaced by the maintained `pastey`).
+
+### Internal
+
+- Added a `cargo-deny` supply-chain audit (advisories/licenses/bans/sources) and a
+  CI test matrix over the MSRV (1.88) and the latest stable toolchain.
+
 ## [0.2.0] - 2026-07-11
 
 ### Added
