@@ -1,33 +1,101 @@
 # CI for grafana-plugin-sdk-rs (canonical repository).
 #
-# The `automtls` feature builds `aws-lc-rs`, which needs a C toolchain + cmake.
+# Speed strategy:
+#   - a custom image (ci/Dockerfile) bakes in the C toolchain + rustfmt/clippy +
+#     sccache, so jobs never `apt-get install` or `rustup component add`;
+#   - sccache caches compilation (incl. Apache Arrow and aws-lc-rs) across jobs
+#     and pipelines — essential on shared runners with no persistent local cache;
+#   - a `warm` job compiles everything once so downstream jobs reuse the cache.
 
 stages:
+  - image
+  - warm
   - check
   - test
   - docs
   - publish
 
-default:
-  image: rust:1.88
-  cache:
-    key: $CI_COMMIT_REF_SLUG
-    paths:
-      - .cargo/registry/index
-      - .cargo/registry/cache
-      - target
-  before_script:
-    - apt-get update -qq && apt-get install -y -qq cmake clang
-    - rustup component add rustfmt clippy
-
 variables:
   CARGO_HOME: $CI_PROJECT_DIR/.cargo
-  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  CARGO_NET_RETRY: "5"
+  CARGO_TERM_COLOR: "always"
   RUST_BACKTRACE: "1"
   FEATURES: "data,stream,reqwest,httpadapter,automtls"
+  RUSTC_WRAPPER: "sccache"
+  SCCACHE_DIR: $CI_PROJECT_DIR/.sccache
+  CI_IMAGE: $CI_REGISTRY_IMAGE/ci:latest
+
+# YAML anchors for the two caches. Deps (registry/git) are keyed on the manifests;
+# the sccache directory is keyed per branch. Most jobs only *pull* both.
+.deps_cache: &deps_cache
+  key:
+    files:
+      - Cargo.toml
+      - crates/grafana-plugin-sdk-rs/Cargo.toml
+  paths:
+    - .cargo/registry/index
+    - .cargo/registry/cache
+    - .cargo/git/db
+
+.sccache_cache: &sccache_cache
+  key: sccache-$CI_COMMIT_REF_SLUG
+  paths:
+    - .sccache
+
+default:
+  image: $CI_IMAGE
+  interruptible: true
+  cache:
+    - <<: *deps_cache
+      policy: pull
+    - <<: *sccache_cache
+      policy: pull
+  after_script:
+    - sccache --show-stats || true
+
+# Build the CI image, only when its Dockerfile changes; otherwise `:latest` from a
+# previous pipeline is reused. Uses kaniko (no privileged Docker needed).
+build-image:
+  stage: image
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: [""]
+  variables:
+    RUSTC_WRAPPER: ""
+  cache: []
+  after_script: []
+  rules:
+    - changes:
+        - ci/Dockerfile
+  script:
+    - mkdir -p /kaniko/.docker
+    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"auth\":\"$(printf '%s:%s' "$CI_REGISTRY_USER" "$CI_JOB_TOKEN" | base64 | tr -d '\n')\"}}}" > /kaniko/.docker/config.json
+    - >-
+      /kaniko/executor
+      --context "$CI_PROJECT_DIR"
+      --dockerfile "$CI_PROJECT_DIR/ci/Dockerfile"
+      --destination "$CI_REGISTRY_IMAGE/ci:latest"
+      --destination "$CI_REGISTRY_IMAGE/ci:$CI_COMMIT_SHORT_SHA"
+      --cache=true
+      --cache-repo "$CI_REGISTRY_IMAGE/ci/cache"
+
+# Compile the whole workspace + all targets once (deps: Arrow, aws-lc-rs, …) so
+# the sccache and registry caches are warm for every downstream job.
+warm:
+  stage: warm
+  cache:
+    - <<: *deps_cache
+      policy: pull-push
+    - <<: *sccache_cache
+      policy: pull-push
+  script:
+    - cargo build --workspace --all-targets --features "$FEATURES"
 
 fmt:
   stage: check
+  cache: []
+  after_script: []
   script:
     - cargo fmt --all --check
 
@@ -41,7 +109,6 @@ clippy:
 test:lean:
   stage: test
   script:
-    - cargo build --workspace
     - cargo test -p grafana-plugin-sdk-rs
     - "! cargo tree -p grafana-plugin-sdk-rs | grep -qi arrow"
 
@@ -63,6 +130,8 @@ doc:
 # The macros crate is published first because the main crate depends on it.
 publish:
   stage: publish
+  cache: []
+  after_script: []
   rules:
     - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/
   script:
