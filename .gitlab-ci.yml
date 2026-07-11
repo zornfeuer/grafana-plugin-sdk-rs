@@ -118,9 +118,14 @@ doc:
     - cargo doc --no-deps
     - cargo doc --no-deps -p grafana-plugin-sdk-rs --features "$FEATURES"
 
-# Publish to crates.io on a version tag (e.g. `v0.1.0`).
-# Requires a masked CI/CD variable `CARGO_REGISTRY_TOKEN` (crates.io API token).
-# The macros crate is published first because the main crate depends on it.
+# Publish to crates.io whenever the workspace version in Cargo.toml is not yet on
+# crates.io — i.e. on a version bump merged to `main`. Idempotent: it checks the
+# crates.io sparse index first and skips crates already published at that version,
+# so re-running on `main` without a bump does nothing.
+#
+# Requires a masked CI/CD variable `CARGO_REGISTRY_TOKEN` (crates.io API token);
+# until it is set the job does not run. The macros crate is published first
+# because the main crate depends on it.
 publish:
   stage: publish
   cache:
@@ -128,7 +133,21 @@ publish:
       policy: pull
   after_script: []
   rules:
-    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/
+    - if: '$CI_COMMIT_BRANCH == "main" && $CARGO_REGISTRY_TOKEN'
   script:
-    - cargo publish -p grafana-plugin-sdk-rs-macros --token "$CARGO_REGISTRY_TOKEN"
-    - cargo publish -p grafana-plugin-sdk-rs --token "$CARGO_REGISTRY_TOKEN"
+    - |
+      set -eu
+      version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+      echo "workspace version: $version"
+      # Both crates are named `graf…`, so their sparse-index prefix is gr/af/.
+      publish_if_new() {
+        crate="$1"
+        if curl -fsSL "https://index.crates.io/gr/af/$crate" 2>/dev/null | grep -q "\"vers\":\"$version\""; then
+          echo "== $crate@$version already on crates.io, skipping"
+        else
+          echo "== publishing $crate@$version"
+          cargo publish -p "$crate" --token "$CARGO_REGISTRY_TOKEN"
+        fi
+      }
+      publish_if_new grafana-plugin-sdk-rs-macros
+      publish_if_new grafana-plugin-sdk-rs
