@@ -1,0 +1,19 @@
+[workspace]
+members = ["crates/*"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+license = "MIT OR Apache-2.0"
+# This project is a fork of `grafana-plugin-sdk-rust` by Ben Sully (Grafana Labs),
+# re-focused on a lean, protocol-first core.
+authors = [
+    "zornfeuer",
+    "Ben Sully <ben.sully@grafana.com>",
+]
+repository = "https://gitlab.com/zornfeuer/grafana-plugin-sdk-rs"
+homepage = "https://gitlab.com/zornfeuer/grafana-plugin-sdk-rs"
+keywords = ["grafana", "plugin", "sdk", "backend", "grpc"]
+categories = ["api-bindings", "web-programming"]

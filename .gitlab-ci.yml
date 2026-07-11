@@ -1,0 +1,70 @@
+# CI for grafana-plugin-sdk-rs (canonical repository).
+#
+# The `automtls` feature builds `aws-lc-rs`, which needs a C toolchain + cmake.
+
+stages:
+  - check
+  - test
+  - docs
+  - publish
+
+default:
+  image: rust:1.88
+  cache:
+    key: $CI_COMMIT_REF_SLUG
+    paths:
+      - .cargo/registry/index
+      - .cargo/registry/cache
+      - target
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq cmake clang
+    - rustup component add rustfmt clippy
+
+variables:
+  CARGO_HOME: $CI_PROJECT_DIR/.cargo
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  FEATURES: "data,stream,reqwest,httpadapter,automtls"
+
+fmt:
+  stage: check
+  script:
+    - cargo fmt --all --check
+
+clippy:
+  stage: check
+  script:
+    - cargo clippy --all-targets -- -D warnings
+    - cargo clippy --all-targets --features "$FEATURES" -- -D warnings
+
+# The lean default build must stay dependency-light: no Apache Arrow.
+test:lean:
+  stage: test
+  script:
+    - cargo build --workspace
+    - cargo test -p grafana-plugin-sdk-rs
+    - "! cargo tree -p grafana-plugin-sdk-rs | grep -qi arrow"
+
+test:features:
+  stage: test
+  script:
+    - cargo test --workspace --features "$FEATURES"
+
+doc:
+  stage: docs
+  variables:
+    RUSTDOCFLAGS: "-D warnings"
+  script:
+    - cargo doc --no-deps
+    - cargo doc --no-deps -p grafana-plugin-sdk-rs --features "$FEATURES"
+
+# Publish to crates.io on a version tag (e.g. `v0.1.0`).
+# Requires a masked CI/CD variable `CARGO_REGISTRY_TOKEN` (crates.io API token).
+# The macros crate is published first because the main crate depends on it.
+publish:
+  stage: publish
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/
+  script:
+    - cargo publish -p grafana-plugin-sdk-rs-macros --token "$CARGO_REGISTRY_TOKEN"
+    - cargo publish -p grafana-plugin-sdk-rs --token "$CARGO_REGISTRY_TOKEN"

@@ -1,0 +1,133 @@
+[package]
+name = "grafana-plugin-sdk-rs"
+description = "A lean, protocol-first SDK for building Grafana backend plugins in Rust."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "../../README.md"
+documentation = "https://docs.rs/grafana-plugin-sdk-rs"
+
+# The crate is published as `grafana-plugin-sdk-rs` but imported as `grafana_plugin_sdk`,
+# keeping user code and the proc-macro-generated paths short and stable.
+[lib]
+name = "grafana_plugin_sdk"
+
+[dependencies]
+grafana-plugin-sdk-rs-macros = { version = "0.1.0", path = "../grafana-plugin-sdk-rs-macros" }
+
+# --- Lean core (always compiled) ---
+cfg-if = "1.0.0"
+chrono = "0.4.26"
+futures-core = "0.3.28"
+futures-util = "0.3.28"
+http = "1.0.0"
+itertools = "0.15.0"
+prost = "0.14.1"
+serde = { version = "1.0.164", features = ["derive"] }
+serde_json = { version = "1.0.96", features = ["float_roundtrip", "raw_value"] }
+serde_with = "3.0.0"
+thiserror = "2.0.11"
+time = { version = "0.3.47", features = ["formatting", "macros"] }
+tokio = { version = "1.38.2", features = ["rt-multi-thread", "time"] }
+tokio-stream = { version = "0.1.14", features = ["net"] }
+tonic = "0.14.2"
+tonic-health = "0.14.2"
+tonic-prost = "0.14.2"
+tracing = "0.1.37"
+tracing-core = "0.1.31"
+tracing-log = "0.2.0"
+tracing-serde = "0.2.0"
+tracing-subscriber = { version = "0.3.20", features = [
+  "env-filter",
+  "json",
+  "time",
+] }
+
+# --- Optional / feature-gated ---
+# Apache Arrow is only needed for dataframe (QueryData) support and is the single
+# heaviest transitive dependency; it stays out of the default build.
+arrow = { version = "59.0.0", default-features = false, features = ["ipc"], optional = true }
+num-traits = { version = "0.2.15", optional = true }
+reqwest_lib = { package = "reqwest", version = "0.13.0", optional = true }
+# httpadapter: all three are already pulled in transitively by tonic, so enabling
+# this feature adds no meaningful weight to a plugin that already serves gRPC.
+axum = { version = "0.8", default-features = false, optional = true }
+tower = { version = "0.5", features = ["util"], optional = true }
+http-body-util = { version = "0.1", optional = true }
+# automtls: go-plugin AutoMTLS. aws-lc-rs provider (via rustls/rcgen defaults) is
+# required to verify Grafana's ECDSA P-521 client certificates.
+rustls = { version = "0.23", optional = true }
+tokio-rustls = { version = "0.26", optional = true }
+# aws_lc_rs backend (not the default `ring`) so rcgen matches rustls's provider
+# and can generate/handle ECDSA P-521, which Grafana uses.
+rcgen = { version = "0.13", default-features = false, features = ["aws_lc_rs", "pem"], optional = true }
+rustls-pemfile = { version = "2", optional = true }
+base64 = { version = "0.22", optional = true }
+async-stream = { version = "0.3", optional = true }
+
+[dev-dependencies]
+async-stream = "0.3.5"
+bytes = "1.11.1"
+futures = "0.3.28"
+paste = "1.0.12"
+pretty_assertions = "1.3.0"
+prometheus = { version = "0.14.0", default-features = false }
+tokio = { version = "1.38.2", features = ["rt-multi-thread", "macros", "io-util", "net"] }
+tokio-stream = "0.1.14"
+
+[build-dependencies]
+tonic-prost-build = { version = "0.14.2", optional = true }
+
+# The bundled example demonstrates data + streaming, so it only builds when those
+# features are enabled: `cargo run --example main --features data,stream`.
+[[example]]
+name = "main"
+required-features = ["data", "stream"]
+
+# A minimal app plugin (health + resource routing) for running against a live
+# Grafana: `cargo run --example app_plugin --features httpadapter,automtls`.
+[[example]]
+name = "app_plugin"
+required-features = ["httpadapter", "automtls"]
+
+[features]
+default = []
+# Dataframe support: the `data` module (Frames/Fields), `DataService`/`QueryData`,
+# and Arrow IPC serialization. Pulls in Apache Arrow.
+data = ["dep:arrow", "dep:num-traits"]
+# Grafana Live streaming support (`StreamService`). Requires dataframes.
+stream = ["data"]
+# Bridge `CallResource` to an `axum::Router` via `tower`'s `oneshot`, so an
+# existing HTTP router can serve plugin resource requests unchanged.
+httpadapter = ["dep:axum", "dep:tower", "dep:http-body-util"]
+# go-plugin automatic mTLS. Required to connect to a Grafana instance that runs
+# backend plugins with AutoMTLS (the default). Activates only when Grafana sets
+# `PLUGIN_CLIENT_CERT`; otherwise the plugin still serves plaintext.
+automtls = [
+    "dep:rustls",
+    "dep:tokio-rustls",
+    "dep:rcgen",
+    "dep:rustls-pemfile",
+    "dep:base64",
+    "dep:async-stream",
+]
+# Adds the `httpclient` module and an `IntoHttpResponse` implementation for
+# `reqwest::Response`.
+reqwest = ["dep:reqwest_lib", "dep:base64"]
+# Regenerate the protobuf bindings at build time instead of using the checked-in
+# code. Requires `protoc` to be installed.
+gen-proto = ["dep:tonic-prost-build"]
+
+# docs.rs-specific configuration
+[package.metadata.docs.rs]
+# Document the functional features, but NOT `gen-proto` (which shells out to
+# `protoc` at build time and would fail in the docs.rs sandbox).
+features = ["data", "stream", "reqwest", "httpadapter", "automtls"]
+# defines the configuration attribute `docsrs`
+rustdoc-args = ["--cfg", "docsrs"]

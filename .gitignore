@@ -1,0 +1,12 @@
+# Build output
+/target
+/target-*
+
+# Local PoC / test stands (Grafana instances, provisioning, bundled plugins)
+/poc-stand
+
+# Local editor/tooling settings
+/.claude/
+
+# Libraries conventionally do not commit their lockfile
+Cargo.lock

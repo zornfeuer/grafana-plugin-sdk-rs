@@ -1,0 +1,18 @@
+grafana-plugin-sdk-rs
+Copyright 2026 the grafana-plugin-sdk-rs authors.
+
+This product is a fork of and includes source code from:
+
+    grafana-plugin-sdk-rust
+    Copyright (c) 2021-2024 Ben Sully <ben.sully@grafana.com> and contributors
+    https://github.com/grafana/grafana-plugin-sdk-rust
+    Licensed under either of Apache License, Version 2.0 or MIT license.
+
+The original code has been modified, in particular:
+  - re-focused on a lean, protocol-first core (CallResource + CheckHealth);
+  - Apache Arrow / dataframe (QueryData) and Grafana Live streaming support
+    moved behind opt-in cargo features (`data`, `stream`);
+  - renamed crates to `grafana-plugin-sdk-rs` / `grafana-plugin-sdk-rs-macros`.
+
+This project is licensed under the terms of both the MIT license and the
+Apache License (Version 2.0). See LICENSE-MIT and LICENSE-APACHE.

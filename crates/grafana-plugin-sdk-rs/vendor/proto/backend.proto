@@ -1,0 +1,478 @@
+syntax = "proto3";
+package pluginv2;
+
+option go_package = "./;pluginv2";
+
+//-----------------------------------------------
+// Common
+//-----------------------------------------------
+
+message AppInstanceSettings {
+  bytes jsonData = 3;
+  map<string,string> decryptedSecureJsonData = 4;
+  int64 lastUpdatedMS = 5;
+
+  // The API version when the settings were saved
+  // NOTE: this may be an older version than the current apiVersion
+  string apiVersion = 6;
+}
+
+message DataSourceInstanceSettings {
+  // Deprecatd: Internal ID, do not use this for anythign important
+  int64 id = 1;
+  string name = 2;
+  string url = 3;
+  string user = 4;
+  string database = 5;
+  bool basicAuthEnabled = 6;
+  string basicAuthUser = 7;
+  bytes jsonData = 8;
+  map<string,string> decryptedSecureJsonData = 9;
+
+  // timestamp when the settings where last changed
+  int64 lastUpdatedMS = 10;
+
+  // Datasoruce unique ID (within an org/stack namespace)
+  string uid = 11;
+
+  // The API version when the settings were saved.
+  // NOTE: this may be an older version than the current apiVersion
+  string apiVersion = 12;
+}
+
+message User {
+  string login = 1;
+  string name = 2;
+  string email = 3;
+  string role = 4;
+}
+
+message PluginContext {
+  // The Grafana organization id the request originates from.
+  int64 orgId = 1;
+
+  // The unique identifier of the plugin the request is targeted for.
+  string pluginId = 2;
+
+  // The Grafana user the request originates from.
+  //
+  // Will not be provided if Grafana backend initiated the request.
+  User user = 3;
+
+  // App plugin instance settings is the configured app instance settings.
+  // In Grafana an app instance is an enabled app plugin in a
+  // Grafana organization.
+  //
+  // Will only be set if request targeting an app instance.
+  AppInstanceSettings appInstanceSettings = 4;
+
+  // Data source instance settings is the configured data source instance
+  // settings. In Grafana a data source instance is a created data source
+  // in a Grafana organization.
+  //
+  // Will only be set if request targeting a data source instance.
+  DataSourceInstanceSettings dataSourceInstanceSettings = 5;
+
+  // The grafana configuration as a map of key/value pairs.
+  map<string,string> grafanaConfig = 6;
+
+  // The version of the plugin the request is targeted for.
+  string pluginVersion = 7;
+
+  // The user agent of the Grafana server that initiated the gRPC request.
+  string userAgent = 8;
+
+  // The API version that initiated a request
+  string apiVersion = 9;
+}
+
+//---------------------------------------------------------
+// Resource service enables HTTP-style requests over gRPC.
+//---------------------------------------------------------
+
+service Resource {
+  rpc CallResource(CallResourceRequest) returns (stream CallResourceResponse);
+}
+
+message StringList {
+  repeated string values = 1;
+}
+
+message CallResourceRequest {
+  PluginContext pluginContext = 1;
+  string path = 2;
+  string method = 3;
+  string url = 4;
+  map<string,StringList> headers = 5;
+  bytes body = 6;
+}
+
+message CallResourceResponse {
+  // Maps to raw HTTP status codes when passed over HTTP
+  int32 code = 1;
+
+  // Raw HTTP headers sent to the client
+  map<string,StringList> headers = 2;
+
+  // Raw HTTP body bytes sent to the client
+  bytes body = 3;
+}
+
+//-----------------------------------------------
+// Data
+//-----------------------------------------------
+
+service Data {
+  rpc QueryData(QueryDataRequest) returns (QueryDataResponse);
+}
+
+message TimeRange {
+  int64 fromEpochMS = 1;
+  int64 toEpochMS = 2;
+}
+
+message DataQuery {
+  string refId = 1;
+  int64 maxDataPoints = 2;
+  int64 intervalMS = 3;
+  TimeRange timeRange = 4;
+  bytes json = 5;
+  string queryType = 6;
+}
+
+// QueryDataRequest
+message QueryDataRequest {
+  PluginContext pluginContext = 1;
+
+  // Environment info
+  map<string,string> headers = 2;
+
+  // List of data queries
+  repeated DataQuery queries = 3;
+}
+
+message QueryDataResponse {
+  // Map of refId to response
+  map<string,DataResponse> responses = 1;
+}
+
+message DataResponse {
+  // Arrow encoded DataFrames
+  // Frame has its own meta, warnings, and repeats refId
+  repeated bytes frames = 1;
+
+  // Error message
+  string error = 2;
+
+  // Currently not used and not exposed in the frontend
+  bytes jsonMeta = 3;
+
+  // When errors exist or a non 2XX status, clients will be passed a 207 HTTP error code in /ds/query
+  // The status codes should match values from standard HTTP status codes
+  // If not set explicitly, it will be marshaled to 200 if no error exists, or 500 if one does
+  int32 status = 4;
+
+  // Error source
+  string errorSource = 5;
+}
+
+//-----------------------------------------------
+// Diagnostics
+//-----------------------------------------------
+
+service Diagnostics {
+  rpc CheckHealth(CheckHealthRequest) returns (CheckHealthResponse);
+  rpc CollectMetrics(CollectMetricsRequest) returns (CollectMetricsResponse);
+}
+
+message CollectMetricsRequest {
+  PluginContext pluginContext = 1;
+}
+
+message CollectMetricsResponse {
+  message Payload {
+    bytes prometheus = 1;
+  }
+
+  Payload metrics = 1;
+}
+
+message CheckHealthRequest {
+  PluginContext pluginContext = 1;
+
+  // Environment info
+  map<string,string> headers = 2;
+}
+
+message CheckHealthResponse {
+  enum HealthStatus {
+    UNKNOWN = 0;
+    OK = 1;
+    ERROR = 2;
+  }
+
+  HealthStatus status = 1;
+  string message = 2;
+  bytes jsonDetails = 3;
+}
+
+//-----------------------------------------------------------------
+// Stream
+//-----------------------------------------------------------------
+
+service Stream {
+  // SubscribeStream called when a user tries to subscribe to a plugin/datasource
+  // managed channel path – thus plugin can check subscribe permissions and communicate
+  // options with Grafana Core. When the first subscriber joins a channel, RunStream
+  // will be called.
+  rpc SubscribeStream(SubscribeStreamRequest) returns (SubscribeStreamResponse);
+
+  // RunStream will be initiated by Grafana to consume a stream. RunStream will be
+  // called once for the first client successfully subscribed to a channel path.
+  // When Grafana detects that there are no longer any subscribers inside a channel,
+  // the call will be terminated until next active subscriber appears. Call termination
+  // can happen with a delay.
+  rpc RunStream(RunStreamRequest) returns (stream StreamPacket);
+
+  // PublishStream called when a user tries to publish to a plugin/datasource
+  // managed channel path. Here plugin can check publish permissions and
+  // modify publication data if required.
+  rpc PublishStream(PublishStreamRequest) returns (PublishStreamResponse);
+}
+
+message SubscribeStreamRequest {
+  PluginContext pluginContext = 1;
+
+  // path part of channel.
+  string path = 2;
+  // optional raw data. May be used as an extra payload supplied upon subscription.
+  // For example, can contain JSON query object.
+  bytes data = 3;
+}
+
+message SubscribeStreamResponse {
+  enum Status {
+    OK = 0;
+    NOT_FOUND = 1;
+    PERMISSION_DENIED = 2;
+  }
+  // status of subscribe response.
+  Status status = 1;
+
+  // JSON-encoded data to return to a client in a successful
+  // subscription result.
+  // For data frame streams this can be a JSON-encoded frame schema.
+  bytes data = 2;
+}
+
+message PublishStreamRequest {
+  PluginContext pluginContext = 1;
+
+  // path part of a channel.
+  string path = 2;
+  // data that user wants to publish into a stream
+  // (only JSON-encoded at the moment).
+  bytes data = 3;
+}
+
+message PublishStreamResponse {
+  enum Status {
+    OK = 0;
+    NOT_FOUND = 1;
+    PERMISSION_DENIED = 2;
+  }
+  // status of publish response.
+  Status status = 1;
+
+  // JSON-encoded data to publish into a channel. This can be
+  // unmodified data from a PublishRequest or any modified data.
+  // If empty data returned here then Grafana won't publish data
+  // to a channel itself but will return a successful result to a
+  // client (supposing plugin published data to a channel itself).
+  bytes data = 2;
+}
+
+message RunStreamRequest {
+  PluginContext pluginContext = 1;
+
+  // path part of a channel.
+  string path = 2;
+  // optional raw data. May be used as an extra payload supplied upon subscription.
+  // For example, can contain JSON query object.
+  bytes data = 3;
+}
+
+message StreamPacket {
+  // JSON-encoded data to publish into a channel.
+  bytes data = 1;
+}
+
+//-----------------------------------------------------------------
+// AdmissionControl -- EXPERIMENTAL and is subject to change until 12.??
+//-----------------------------------------------------------------
+
+// Admission control is a service based on the kubernetes admission webhook patterns.
+// This service can be used to verify if objects are valid and convert between versions
+// See: https://github.com/kubernetes/kubernetes/blob/v1.30.0/pkg/apis/admission/types.go#L41
+// And: https://github.com/grafana/grafana-app-sdk/blob/main/resource/admission.go#L14
+service AdmissionControl {
+  // Validate a resource -- the response is a simple yes/no
+  rpc ValidateAdmission(AdmissionRequest) returns (ValidationResponse);
+
+  // Return a modified copy of the request that can be saved or a descriptive error
+  rpc MutateAdmission(AdmissionRequest) returns (MutationResponse);
+}
+
+// Identify the Object properties
+message GroupVersionKind {
+  string group = 1;
+  string version = 2;
+  string kind = 3;
+}
+
+// AdmissionRequest contains information from a kubernetes Admission request and decoded object(s).
+message AdmissionRequest {
+  // Operation is the type of resource operation being checked for admission control
+  // https://github.com/kubernetes/kubernetes/blob/v1.30.0/pkg/apis/admission/types.go#L158
+  enum Operation {
+    CREATE = 0;
+    UPDATE = 1;
+    DELETE = 2;
+  }
+
+  // NOTE: this may not include app or datasource instance settings depending on the request
+  PluginContext pluginContext = 1;
+
+  // The requested operation
+  Operation operation = 2;
+  
+  // The object kind
+  GroupVersionKind kind = 3;
+
+  // Object is the object in the request.  This includes the full metadata envelope.
+  bytes object_bytes = 4;
+
+  // OldObject is the object as it currently exists in storage. This includes the full metadata envelope.
+  bytes old_object_bytes = 5;
+}
+
+
+// Check if an object can be admitted
+message ValidationResponse {
+  // Allowed indicates whether or not the admission request was permitted.
+  bool allowed = 1;
+
+  // Result contains extra details into why an admission request was denied.
+  // This field IS NOT consulted in any way if "Allowed" is "true".
+  // +optional
+  StatusResult result = 2;
+
+  // warnings is a list of warning messages to return to the requesting API client.
+  // Warning messages describe a problem the client making the API request should correct or be aware of.
+  // Limit warnings to 120 characters if possible.
+  // Warnings over 256 characters and large numbers of warnings may be truncated.
+  // +optional
+  repeated string warnings = 3;
+}
+
+// Return a mutated copy of the object in a form that can be admitted
+message MutationResponse {
+  // Allowed indicates whether or not the admission request was permitted.
+  bool allowed = 1;
+
+  // Result contains extra details into why an admission request was denied.
+  // This field IS NOT consulted in any way if "Allowed" is "true".
+  // +optional
+  StatusResult result = 2;
+
+  // warnings is a list of warning messages to return to the requesting API client.
+  // Warning messages describe a problem the client making the API request should correct or be aware of.
+  // Limit warnings to 120 characters if possible.
+  // Warnings over 256 characters and large numbers of warnings may be truncated.
+  // +optional
+  repeated string warnings = 3;
+
+  // Mutated object bytes
+  bytes object_bytes = 4;
+}
+
+//-----------------------------------------------------------------
+// ResourceConversion -- EXPERIMENTAL and is subject to change until 12.??
+//-----------------------------------------------------------------
+
+// ResourceConversion is a service that can be used to convert resources between versions
+// See: https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definition-versioning/#webhook-request-and-response
+service ResourceConversion {
+  // Convert objects to a target version
+  rpc ConvertObjects(ConversionRequest) returns (ConversionResponse);
+}
+
+// GroupVersion represents the API group and version of a resource.
+message GroupVersion{
+  string group = 1;
+  string version = 2;
+}
+
+// RawObject contains a resource serialized into a byte array with a content type
+message RawObject {
+  // Raw is the serialized object
+  bytes raw = 1;
+  // ContentType is the media type of the raw object
+  string content_type = 2;
+}
+
+// ConversionRequest supports converting objects from one version to another 
+message ConversionRequest {
+  // NOTE: this may not include app or datasource instance settings depending on the request
+  PluginContext pluginContext = 1;
+
+  // uid is an identifier for the individual request/response. It allows distinguishing instances of requests which are
+  // otherwise identical (parallel requests, etc).
+  // The UID is meant to track the round trip (request/response) between the Kubernetes API server and the webhook, not the user request.
+  // It is suitable for correlating log entries between the webhook and apiserver, for either auditing or debugging.
+  string uid = 2;
+
+  // Objects to convert
+  // +listType=atomic
+  repeated RawObject objects = 3;
+
+  // Target converted version
+  GroupVersion target_version = 4;
+}
+
+
+// ConversionResponse contains the converted objects
+message ConversionResponse {
+  // uid is an identifier for the individual request/response.
+  // This should be copied over from the corresponding `request.uid`.
+  string uid = 1;
+
+  // result contains extra details into why an admission request was denied.
+  StatusResult result = 2;
+
+  // objects is the list of converted version of `request.objects` if the `result` is successful, otherwise empty.
+  // +listType=atomic
+  repeated RawObject objects = 3;
+}
+
+// Status structure is copied from:
+// https://github.com/kubernetes/apimachinery/blob/v0.30.1/pkg/apis/meta/v1/generated.proto#L979
+message StatusResult {
+  // Status of the operation.
+  // One of: "Success" or "Failure".
+  // More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+  // +optional
+  string status = 1;
+  // A human-readable description of the status of this operation.
+  // +optional
+  string message = 2;
+  // A machine-readable description of why this operation is in the
+  // "Failure" status. If this value is empty there
+  // is no information available. A Reason clarifies an HTTP status
+  // code but does not override it.
+  // +optional
+  string reason = 3;
+  // Suggested HTTP return code for this status, 0 if not set.
+  // +optional
+  int32 code = 4;
+}
