@@ -92,7 +92,7 @@ Working towards feature parity with the Go SDK, roughly in priority order:
 - [x] `CheckHealth`, `CallResource` (+ `axum` adapter), `QueryData`/dataframes, Grafana Live streaming
 - [x] Automatic mTLS, instance management, `GrafanaConfig`/feature toggles, `httpclient`, build info
 - [x] Admission control & resource conversion services (`admission` feature)
-- [ ] `Data.QueryChunkedData` (chunked query responses)
+- [x] `Data.QueryChunkedData` (chunked query responses, derived from `query_data`)
 - [ ] OpenTelemetry trace-context propagation across the gRPC boundary
 - [ ] Fuller `httpclient` middleware; datasource instance-management helpers
 - [ ] Hygiene: `cargo-deny`, a CI toolchain matrix, more examples (datasource, streaming)

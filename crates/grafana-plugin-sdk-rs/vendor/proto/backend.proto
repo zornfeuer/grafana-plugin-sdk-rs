@@ -124,6 +124,17 @@ message CallResourceResponse {
 
 service Data {
   rpc QueryData(QueryDataRequest) returns (QueryDataResponse);
+
+  // Query data, streaming the encoded frames back in chunks.
+  rpc QueryChunkedData(QueryChunkedDataRequest) returns (stream QueryChunkedDataResponse);
+}
+
+// The encoding used for frames in a chunked query response.
+enum DataFrameFormat {
+  // Full Arrow schema + data.
+  ARROW = 0;
+  // JSON-encoded schema + data.
+  JSON = 1;
 }
 
 message TimeRange {
@@ -174,6 +185,43 @@ message DataResponse {
 
   // Error source
   string errorSource = 5;
+}
+
+message QueryChunkedDataRequest {
+  PluginContext pluginContext = 1;
+
+  // Environment info
+  map<string,string> headers = 2;
+
+  // List of data queries
+  repeated DataQuery queries = 3;
+
+  // The requested response format
+  DataFrameFormat format = 4;
+}
+
+message QueryChunkedDataResponse {
+  string refId = 1;
+
+  // Frame identifier that links multiple responses together. When an identifier appears the first time,
+  // the frame must include both metadata and rows. Subsequent responses with the same identifier
+  // will only include rows and must match the original frame structure.
+  string frameId = 2;
+
+  // Encoded frame -- the format is determined by the format parameter
+  bytes frame = 3;
+
+  // Error message
+  string error = 4;
+
+  // When errors exist or a non 2XX status, clients will be passed a 207 HTTP error code in /ds/query
+  int32 status = 5;
+
+  // Error source
+  string errorSource = 6;
+
+  // The frame format (defaults to arrow)
+  DataFrameFormat format = 7;
 }
 
 //-----------------------------------------------

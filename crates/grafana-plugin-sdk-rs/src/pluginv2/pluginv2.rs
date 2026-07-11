@@ -206,6 +206,48 @@ pub struct DataResponse {
     pub error_source: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct QueryChunkedDataRequest {
+    #[prost(message, optional, tag = "1")]
+    pub plugin_context: ::core::option::Option<PluginContext>,
+    /// Environment info
+    #[prost(map = "string, string", tag = "2")]
+    pub headers: ::std::collections::HashMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+    /// List of data queries
+    #[prost(message, repeated, tag = "3")]
+    pub queries: ::prost::alloc::vec::Vec<DataQuery>,
+    /// The requested response format
+    #[prost(enumeration = "DataFrameFormat", tag = "4")]
+    pub format: i32,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct QueryChunkedDataResponse {
+    #[prost(string, tag = "1")]
+    pub ref_id: ::prost::alloc::string::String,
+    /// Frame identifier that links multiple responses together. When an identifier appears the first time,
+    /// the frame must include both metadata and rows. Subsequent responses with the same identifier
+    /// will only include rows and must match the original frame structure.
+    #[prost(string, tag = "2")]
+    pub frame_id: ::prost::alloc::string::String,
+    /// Encoded frame -- the format is determined by the format parameter
+    #[prost(bytes = "vec", tag = "3")]
+    pub frame: ::prost::alloc::vec::Vec<u8>,
+    /// Error message
+    #[prost(string, tag = "4")]
+    pub error: ::prost::alloc::string::String,
+    /// When errors exist or a non 2XX status, clients will be passed a 207 HTTP error code in /ds/query
+    #[prost(int32, tag = "5")]
+    pub status: i32,
+    /// Error source
+    #[prost(string, tag = "6")]
+    pub error_source: ::prost::alloc::string::String,
+    /// The frame format (defaults to arrow)
+    #[prost(enumeration = "DataFrameFormat", tag = "7")]
+    pub format: i32,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectMetricsRequest {
     #[prost(message, optional, tag = "1")]
     pub plugin_context: ::core::option::Option<PluginContext>,
@@ -628,6 +670,35 @@ pub struct StatusResult {
     #[prost(int32, tag = "4")]
     pub code: i32,
 }
+/// The encoding used for frames in a chunked query response.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum DataFrameFormat {
+    /// Full Arrow schema + data.
+    Arrow = 0,
+    /// JSON-encoded schema + data.
+    Json = 1,
+}
+impl DataFrameFormat {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Arrow => "ARROW",
+            Self::Json => "JSON",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "ARROW" => Some(Self::Arrow),
+            "JSON" => Some(Self::Json),
+            _ => None,
+        }
+    }
+}
 /// Generated client implementations.
 pub mod resource_client {
     #![allow(
@@ -1046,6 +1117,31 @@ pub mod data_client {
             req.extensions_mut().insert(GrpcMethod::new("pluginv2.Data", "QueryData"));
             self.inner.unary(req, path, codec).await
         }
+        /// Query data, streaming the encoded frames back in chunks.
+        pub async fn query_chunked_data(
+            &mut self,
+            request: impl tonic::IntoRequest<super::QueryChunkedDataRequest>,
+        ) -> std::result::Result<
+            tonic::Response<tonic::codec::Streaming<super::QueryChunkedDataResponse>>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/pluginv2.Data/QueryChunkedData",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("pluginv2.Data", "QueryChunkedData"));
+            self.inner.server_streaming(req, path, codec).await
+        }
     }
 }
 /// Generated server implementations.
@@ -1066,6 +1162,23 @@ pub mod data_server {
             request: tonic::Request<super::QueryDataRequest>,
         ) -> std::result::Result<
             tonic::Response<super::QueryDataResponse>,
+            tonic::Status,
+        >;
+        /// Server streaming response type for the QueryChunkedData method.
+        type QueryChunkedDataStream: tonic::codegen::tokio_stream::Stream<
+                Item = std::result::Result<
+                    super::QueryChunkedDataResponse,
+                    tonic::Status,
+                >,
+            >
+            + std::marker::Send
+            + 'static;
+        /// Query data, streaming the encoded frames back in chunks.
+        async fn query_chunked_data(
+            &self,
+            request: tonic::Request<super::QueryChunkedDataRequest>,
+        ) -> std::result::Result<
+            tonic::Response<Self::QueryChunkedDataStream>,
             tonic::Status,
         >;
     }
@@ -1184,6 +1297,53 @@ pub mod data_server {
                                 max_encoding_message_size,
                             );
                         let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/pluginv2.Data/QueryChunkedData" => {
+                    #[allow(non_camel_case_types)]
+                    struct QueryChunkedDataSvc<T: Data>(pub Arc<T>);
+                    impl<
+                        T: Data,
+                    > tonic::server::ServerStreamingService<
+                        super::QueryChunkedDataRequest,
+                    > for QueryChunkedDataSvc<T> {
+                        type Response = super::QueryChunkedDataResponse;
+                        type ResponseStream = T::QueryChunkedDataStream;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::ResponseStream>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::QueryChunkedDataRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as Data>::query_chunked_data(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = QueryChunkedDataSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.server_streaming(method, req).await;
                         Ok(res)
                     };
                     Box::pin(fut)

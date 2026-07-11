@@ -8,6 +8,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `Data.QueryChunkedData`: the checked-in `pluginv2` bindings were regenerated to
+  add the chunked-query RPC, and the `DataService` gRPC bridge now serves it by
+  streaming each Arrow-encoded frame produced by `query_data` as a separate chunk.
+  Plugins get chunked support for free from their existing `query_data`.
 - `admission` feature: Kubernetes-style admission control (`AdmissionService`) and
   resource conversion (`ConversionService`) services, with the SDK types and tonic
   bridges, closing the remaining pluginv2 service-parity gap. The `Plugin` builder

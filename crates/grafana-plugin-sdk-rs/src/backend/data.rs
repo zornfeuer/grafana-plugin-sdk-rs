@@ -502,4 +502,142 @@ where
             responses,
         }))
     }
+
+    type QueryChunkedDataStream = Pin<
+        Box<dyn Stream<Item = Result<pluginv2::QueryChunkedDataResponse, tonic::Status>> + Send>,
+    >;
+
+    /// Serve chunked queries by reusing [`DataService::query_data`], streaming each
+    /// encoded (Arrow) frame back as a separate chunk. Plugins get chunked support
+    /// for free from their existing `query_data` implementation.
+    #[tracing::instrument(skip(self), level = "debug")]
+    async fn query_chunked_data(
+        &self,
+        request: tonic::Request<pluginv2::QueryChunkedDataRequest>,
+    ) -> Result<tonic::Response<Self::QueryChunkedDataStream>, tonic::Status> {
+        let inner = request.into_inner();
+        let responses = DataService::query_data(
+            self,
+            pluginv2::QueryDataRequest {
+                plugin_context: inner.plugin_context,
+                headers: inner.headers,
+                queries: inner.queries,
+            }
+            .try_into()
+            .map_err(ConvertFromError::into_tonic_status)?,
+        )
+        .await;
+
+        let format = pluginv2::DataFrameFormat::Arrow as i32;
+        let stream = responses.flat_map(move |resp| {
+            let chunks: Vec<Result<pluginv2::QueryChunkedDataResponse, tonic::Status>> = match resp
+            {
+                Ok(x) => {
+                    let ref_id = x.ref_id;
+                    match x.frames {
+                        Ok(frames) => frames
+                            .into_iter()
+                            .enumerate()
+                            .map(|(i, frame)| {
+                                Ok(pluginv2::QueryChunkedDataResponse {
+                                    ref_id: ref_id.clone(),
+                                    frame_id: format!("{ref_id}-{i}"),
+                                    frame,
+                                    error: String::new(),
+                                    status: DataQueryStatus::OK.as_i32(),
+                                    error_source: String::new(),
+                                    format,
+                                })
+                            })
+                            .collect(),
+                        Err(e) => vec![Ok(pluginv2::QueryChunkedDataResponse {
+                            ref_id,
+                            frame_id: String::new(),
+                            frame: Vec::new(),
+                            error: e.to_string(),
+                            status: DataQueryStatus::Internal.as_i32(),
+                            error_source: ErrorSource::Plugin.to_string(),
+                            format,
+                        })],
+                    }
+                }
+                Err(e) => {
+                    let status = e.status().as_i32();
+                    let error_source = e.source().to_string();
+                    let error = e.to_string();
+                    vec![Ok(pluginv2::QueryChunkedDataResponse {
+                        ref_id: e.ref_id(),
+                        frame_id: String::new(),
+                        frame: Vec::new(),
+                        error,
+                        status,
+                        error_source,
+                        format,
+                    })]
+                }
+            };
+            futures_util::stream::iter(chunks)
+        });
+        Ok(tonic::Response::new(Box::pin(stream)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::backend::{AppPlugin, DataResponse};
+    use crate::prelude::*;
+    use serde_json::Value;
+
+    #[derive(Clone, Debug)]
+    struct Plugin;
+    impl GrafanaPlugin for Plugin {
+        type PluginType = AppPlugin<Value, Value>;
+        type JsonData = Value;
+        type SecureJsonData = Value;
+    }
+
+    #[derive(Debug, thiserror::Error)]
+    #[error("boom")]
+    struct QueryError;
+    impl DataQueryError for QueryError {
+        fn ref_id(self) -> String {
+            "A".to_owned()
+        }
+    }
+
+    #[tonic::async_trait]
+    impl DataService for Plugin {
+        type Query = Value;
+        type QueryError = QueryError;
+        type Stream = BoxDataResponseStream<QueryError>;
+        async fn query_data(&self, _request: QueryDataRequest<Self::Query, Self>) -> Self::Stream {
+            let frame = [[1_u32, 2, 3].into_field("x")].into_frame("f");
+            // `DataResponse::new` serializes the frame to Arrow immediately, so the
+            // borrow ends before `frame` is dropped.
+            let response = DataResponse::new("A".to_owned(), vec![frame.check().unwrap()]);
+            Box::pin(futures_util::stream::iter(vec![Ok(response)]))
+        }
+    }
+
+    // `query_chunked_data` should stream each frame produced by `query_data`.
+    #[tokio::test]
+    async fn query_chunked_data_derives_from_query_data() {
+        use pluginv2::data_server::Data;
+        let request = tonic::Request::new(pluginv2::QueryChunkedDataRequest {
+            plugin_context: Some(pluginv2::PluginContext::default()),
+            headers: HashMap::new(),
+            queries: vec![],
+            format: pluginv2::DataFrameFormat::Arrow as i32,
+        });
+        let response = Data::query_chunked_data(&Plugin, request).await.unwrap();
+        let chunks: Vec<_> = response.into_inner().collect().await;
+        assert_eq!(chunks.len(), 1);
+        let chunk = chunks[0].as_ref().unwrap();
+        assert_eq!(chunk.ref_id, "A");
+        assert_eq!(chunk.frame_id, "A-0");
+        assert!(!chunk.frame.is_empty());
+        assert_eq!(chunk.error, "");
+        assert_eq!(chunk.format, pluginv2::DataFrameFormat::Arrow as i32);
+    }
 }

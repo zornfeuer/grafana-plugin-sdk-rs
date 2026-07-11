@@ -399,6 +399,8 @@ impl CheckedFrame<'_> {
     /// Serialize this frame to JSON, returning the serialized bytes.
     ///
     /// Unlike the `Serialize` impl, this method allows for customization of the fields included.
+    // Only used by the `stream` feature; harmless (dead) with `data` alone.
+    #[cfg_attr(not(feature = "stream"), allow(dead_code))]
     pub(crate) fn to_json(&self, include: FrameInclude) -> Result<Vec<u8>, serde_json::Error> {
         let schema_fields: Vec<_> = self
             .0
