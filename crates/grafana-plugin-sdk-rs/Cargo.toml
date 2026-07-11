@@ -103,6 +103,9 @@ default = []
 data = ["dep:arrow", "dep:num-traits"]
 # Grafana Live streaming support (`StreamService`). Requires dataframes.
 stream = ["data"]
+# Kubernetes-style admission control and resource conversion services
+# (EXPERIMENTAL in Grafana; the app-platform / apiserver surface).
+admission = []
 # Bridge `CallResource` to an `axum::Router` via `tower`'s `oneshot`, so an
 # existing HTTP router can serve plugin resource requests unchanged.
 httpadapter = ["dep:axum", "dep:tower", "dep:http-body-util"]
@@ -128,6 +131,6 @@ gen-proto = ["dep:tonic-prost-build"]
 [package.metadata.docs.rs]
 # Document the functional features, but NOT `gen-proto` (which shells out to
 # `protoc` at build time and would fail in the docs.rs sandbox).
-features = ["data", "stream", "reqwest", "httpadapter", "automtls"]
+features = ["data", "stream", "reqwest", "httpadapter", "automtls", "admission"]
 # defines the configuration attribute `docsrs`
 rustdoc-args = ["--cfg", "docsrs"]

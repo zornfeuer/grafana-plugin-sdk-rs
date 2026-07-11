@@ -6,6 +6,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `admission` feature: Kubernetes-style admission control (`AdmissionService`) and
+  resource conversion (`ConversionService`) services, with the SDK types and tonic
+  bridges, closing the remaining pluginv2 service-parity gap. The `Plugin` builder
+  gains `admission_service`/`conversion_service`, and `#[main]` supports
+  `services(admission, conversion)`.
+
 ## [0.1.0] - 2026-07-11
 
 Initial release: a lean, protocol-first fork of `grafana-plugin-sdk-rust`, focused

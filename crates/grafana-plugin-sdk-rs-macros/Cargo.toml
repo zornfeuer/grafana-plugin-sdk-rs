@@ -26,7 +26,7 @@ syn = { version = "2.0.18", features = ["full"] }
 [dev-dependencies]
 # Enable data + stream so the macro doc examples (which register those services)
 # compile under `cargo test`.
-grafana-plugin-sdk-rs = { path = "../grafana-plugin-sdk-rs", features = ["data", "stream"] }
+grafana-plugin-sdk-rs = { path = "../grafana-plugin-sdk-rs", features = ["data", "stream", "admission"] }
 http = "1.0.0"
 serde = { version = "1.0.164", features = ["derive"] }
 thiserror = "2.0.11"

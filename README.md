@@ -78,11 +78,26 @@ The crate is published as `grafana-plugin-sdk-rs` and imported as
 | `reqwest`     |         | The `httpclient` builder + `IntoHttpResponse` for `reqwest::Response`. |
 | `data`        |         | Dataframes (`Frame`/`Field`), `QueryData`/`DataService`, Arrow IPC. Pulls in Apache Arrow. |
 | `stream`      |         | Grafana Live `StreamService` (implies `data`). |
+| `admission`   |         | Kubernetes-style admission control and resource conversion services (experimental). |
 | `gen-proto`   |         | Regenerate protobuf bindings at build time (requires `protoc`). |
 
 > A plugin talking to a real Grafana almost always wants `automtls` +
 > `httpadapter`. `data`/`stream` (and their Apache Arrow dependency) stay out of
 > the default build.
+
+## Roadmap
+
+Working towards feature parity with the Go SDK, roughly in priority order:
+
+- [x] `CheckHealth`, `CallResource` (+ `axum` adapter), `QueryData`/dataframes, Grafana Live streaming
+- [x] Automatic mTLS, instance management, `GrafanaConfig`/feature toggles, `httpclient`, build info
+- [x] Admission control & resource conversion services (`admission` feature)
+- [ ] `Data.QueryChunkedData` (chunked query responses)
+- [ ] OpenTelemetry trace-context propagation across the gRPC boundary
+- [ ] Fuller `httpclient` middleware; datasource instance-management helpers
+- [ ] Hygiene: `cargo-deny`, a CI toolchain matrix, more examples (datasource, streaming)
+
+Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

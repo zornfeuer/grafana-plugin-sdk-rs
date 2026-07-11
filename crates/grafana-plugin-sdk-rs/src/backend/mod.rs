@@ -14,7 +14,7 @@ The basic requirements for a backend plugin are to provide a `main` function whi
 - use the `Plugin::*_service` methods to attach your plugin
 - begin serving on the listener returned by `initialize` using [`Plugin::start`].
 
-If you're not sure where to start, take a look at the [`Plugin`] struct, its four important methods, and
+If you're not sure where to start, take a look at the [`Plugin`] struct, its `*_service` methods, and
 the trait bounds for each of them - those give an idea of what your plugin will need to implement.
 
 # Logging and `tracing`
@@ -150,6 +150,11 @@ use tracing_subscriber::{
 use crate::pluginv2::data_server::DataServer;
 #[cfg(feature = "stream")]
 use crate::pluginv2::stream_server::StreamServer;
+#[cfg(feature = "admission")]
+use crate::pluginv2::{
+    admission_control_server::AdmissionControlServer,
+    resource_conversion_server::ResourceConversionServer,
+};
 use crate::{
     live,
     pluginv2::{self, diagnostics_server::DiagnosticsServer, resource_server::ResourceServer},
@@ -158,6 +163,10 @@ use crate::{
 /// Re-export of `async_trait` proc macro, so plugin implementations don't have to import tonic manually.
 pub use tonic::async_trait;
 
+#[cfg(feature = "admission")]
+mod admission;
+#[cfg(feature = "admission")]
+mod conversion;
 #[cfg(feature = "data")]
 mod data;
 mod diagnostics;
@@ -172,6 +181,15 @@ mod resource;
 mod stream;
 mod tracing_fmt;
 
+#[cfg(feature = "admission")]
+pub use admission::{
+    AdmissionOperation, AdmissionRequest, AdmissionService, GroupVersionKind, MutationResponse,
+    StatusResult, ValidationResponse,
+};
+#[cfg(feature = "admission")]
+pub use conversion::{
+    ConversionRequest, ConversionResponse, ConversionService, GroupVersion, RawObject,
+};
 #[cfg(feature = "data")]
 pub use data::{
     BoxDataResponseStream, DataQuery, DataQueryError, DataQueryStatus, DataResponse, DataService,
@@ -221,6 +239,22 @@ use stream::StreamService as MaybeStreamService;
 pub trait MaybeStreamService {}
 #[cfg(not(feature = "stream"))]
 impl<T> MaybeStreamService for T {}
+
+#[cfg(feature = "admission")]
+use admission::AdmissionService as MaybeAdmissionService;
+#[cfg(not(feature = "admission"))]
+#[doc(hidden)]
+pub trait MaybeAdmissionService {}
+#[cfg(not(feature = "admission"))]
+impl<T> MaybeAdmissionService for T {}
+
+#[cfg(feature = "admission")]
+use conversion::ConversionService as MaybeConversionService;
+#[cfg(not(feature = "admission"))]
+#[doc(hidden)]
+pub trait MaybeConversionService {}
+#[cfg(not(feature = "admission"))]
+impl<T> MaybeConversionService for T {}
 
 struct ShutdownHandler {
     address: SocketAddr,
@@ -378,7 +412,7 @@ mod sealed {
 ///     MyPlugin
 /// }
 /// ```
-pub struct Plugin<D, Q, R, S> {
+pub struct Plugin<D, Q, R, S, A = NoopService, C = NoopService> {
     shutdown_handler: Option<ShutdownHandler>,
     init_subscriber: bool,
 
@@ -386,9 +420,11 @@ pub struct Plugin<D, Q, R, S> {
     data_service: Option<Q>,
     resource_service: Option<R>,
     stream_service: Option<S>,
+    admission_service: Option<A>,
+    conversion_service: Option<C>,
 }
 
-impl Plugin<NoopService, NoopService, NoopService, NoopService> {
+impl Plugin<NoopService, NoopService, NoopService, NoopService, NoopService, NoopService> {
     /// Create a new `Plugin` with no registered services.
     #[must_use]
     pub fn new() -> Self {
@@ -399,17 +435,21 @@ impl Plugin<NoopService, NoopService, NoopService, NoopService> {
             data_service: None,
             resource_service: None,
             stream_service: None,
+            admission_service: None,
+            conversion_service: None,
         }
     }
 }
 
-impl Default for Plugin<NoopService, NoopService, NoopService, NoopService> {
+impl Default
+    for Plugin<NoopService, NoopService, NoopService, NoopService, NoopService, NoopService>
+{
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<D, Q, R, S> Plugin<D, Q, R, S> {
+impl<D, Q, R, S, A, C> Plugin<D, Q, R, S, A, C> {
     /// Add a shutdown handler to the plugin, listening on the specified address.
     ///
     /// The shutdown handler waits for a TCP connection on the specified address
@@ -457,7 +497,7 @@ impl<D, Q, R, S> Plugin<D, Q, R, S> {
     ///
     /// Only available when the `data` feature is enabled.
     #[cfg(feature = "data")]
-    pub fn data_service<T>(self, service: T) -> Plugin<D, T, R, S>
+    pub fn data_service<T>(self, service: T) -> Plugin<D, T, R, S, A, C>
     where
         T: DataService + Send + Sync + 'static,
     {
@@ -468,11 +508,13 @@ impl<D, Q, R, S> Plugin<D, Q, R, S> {
             diagnostics_service: self.diagnostics_service,
             resource_service: self.resource_service,
             stream_service: self.stream_service,
+            admission_service: self.admission_service,
+            conversion_service: self.conversion_service,
         }
     }
 
     /// Add a diagnostics service to this plugin.
-    pub fn diagnostics_service<T>(self, service: T) -> Plugin<T, Q, R, S>
+    pub fn diagnostics_service<T>(self, service: T) -> Plugin<T, Q, R, S, A, C>
     where
         T: DiagnosticsService + Send + Sync + 'static,
     {
@@ -483,11 +525,13 @@ impl<D, Q, R, S> Plugin<D, Q, R, S> {
             data_service: self.data_service,
             resource_service: self.resource_service,
             stream_service: self.stream_service,
+            admission_service: self.admission_service,
+            conversion_service: self.conversion_service,
         }
     }
 
     /// Add a resource service to this plugin.
-    pub fn resource_service<T>(self, service: T) -> Plugin<D, Q, T, S>
+    pub fn resource_service<T>(self, service: T) -> Plugin<D, Q, T, S, A, C>
     where
         T: ResourceService + Send + Sync + 'static,
     {
@@ -498,6 +542,8 @@ impl<D, Q, R, S> Plugin<D, Q, R, S> {
             diagnostics_service: self.diagnostics_service,
             data_service: self.data_service,
             stream_service: self.stream_service,
+            admission_service: self.admission_service,
+            conversion_service: self.conversion_service,
         }
     }
 
@@ -505,7 +551,7 @@ impl<D, Q, R, S> Plugin<D, Q, R, S> {
     ///
     /// Only available when the `stream` feature is enabled.
     #[cfg(feature = "stream")]
-    pub fn stream_service<T>(self, service: T) -> Plugin<D, Q, R, T>
+    pub fn stream_service<T>(self, service: T) -> Plugin<D, Q, R, T, A, C>
     where
         T: StreamService + Send + Sync + 'static,
     {
@@ -516,16 +562,60 @@ impl<D, Q, R, S> Plugin<D, Q, R, S> {
             diagnostics_service: self.diagnostics_service,
             data_service: self.data_service,
             resource_service: self.resource_service,
+            admission_service: self.admission_service,
+            conversion_service: self.conversion_service,
+        }
+    }
+
+    /// Add an admission control service to this plugin.
+    ///
+    /// Only available when the `admission` feature is enabled.
+    #[cfg(feature = "admission")]
+    pub fn admission_service<T>(self, service: T) -> Plugin<D, Q, R, S, T, C>
+    where
+        T: AdmissionService + Send + Sync + 'static,
+    {
+        Plugin {
+            admission_service: Some(service),
+            shutdown_handler: self.shutdown_handler,
+            init_subscriber: self.init_subscriber,
+            diagnostics_service: self.diagnostics_service,
+            data_service: self.data_service,
+            resource_service: self.resource_service,
+            stream_service: self.stream_service,
+            conversion_service: self.conversion_service,
+        }
+    }
+
+    /// Add a resource conversion service to this plugin.
+    ///
+    /// Only available when the `admission` feature is enabled.
+    #[cfg(feature = "admission")]
+    pub fn conversion_service<T>(self, service: T) -> Plugin<D, Q, R, S, A, T>
+    where
+        T: ConversionService + Send + Sync + 'static,
+    {
+        Plugin {
+            conversion_service: Some(service),
+            shutdown_handler: self.shutdown_handler,
+            init_subscriber: self.init_subscriber,
+            diagnostics_service: self.diagnostics_service,
+            data_service: self.data_service,
+            resource_service: self.resource_service,
+            stream_service: self.stream_service,
+            admission_service: self.admission_service,
         }
     }
 }
 
-impl<D, Q, R, S> Plugin<D, Q, R, S>
+impl<D, Q, R, S, A, C> Plugin<D, Q, R, S, A, C>
 where
     D: DiagnosticsService + Send + Sync + 'static,
     Q: MaybeDataService + Send + Sync + 'static,
     R: ResourceService + Send + Sync + 'static,
     S: MaybeStreamService + Send + Sync + 'static,
+    A: MaybeAdmissionService + Send + Sync + 'static,
+    C: MaybeConversionService + Send + Sync + 'static,
 {
     /// Start the plugin.
     ///
@@ -567,6 +657,20 @@ where
             health_reporter.set_serving::<StreamServer<S>>().await;
             plugins.push("stream");
         }
+        #[cfg(feature = "admission")]
+        if self.admission_service.is_some() {
+            health_reporter
+                .set_serving::<AdmissionControlServer<A>>()
+                .await;
+            plugins.push("admission");
+        }
+        #[cfg(feature = "admission")]
+        if self.conversion_service.is_some() {
+            health_reporter
+                .set_serving::<ResourceConversionServer<C>>()
+                .await;
+            plugins.push("conversion");
+        }
         // Log the services included in the plugin, identically to the Go SDK.
         tracing::debug!(
             plugins = %format!("[{}]", plugins.join(" ")),
@@ -585,6 +689,13 @@ where
         #[cfg(feature = "stream")]
         {
             router = router.add_optional_service(self.stream_service.map(StreamServer::new));
+        }
+        #[cfg(feature = "admission")]
+        {
+            router = router
+                .add_optional_service(self.admission_service.map(AdmissionControlServer::new));
+            router = router
+                .add_optional_service(self.conversion_service.map(ResourceConversionServer::new));
         }
         #[cfg(feature = "automtls")]
         let tls = mtls::SERVER_TLS.get().cloned().flatten();

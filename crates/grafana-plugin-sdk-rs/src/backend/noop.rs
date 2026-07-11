@@ -107,3 +107,34 @@ impl StreamService for NoopService {
         unreachable!()
     }
 }
+
+#[cfg(feature = "admission")]
+#[tonic::async_trait]
+impl AdmissionService for NoopService {
+    type ValidationError = Infallible;
+    async fn validate_admission(
+        &self,
+        _request: AdmissionRequest<Self>,
+    ) -> Result<ValidationResponse, Self::ValidationError> {
+        unreachable!()
+    }
+    type MutationError = Infallible;
+    async fn mutate_admission(
+        &self,
+        _request: AdmissionRequest<Self>,
+    ) -> Result<MutationResponse, Self::MutationError> {
+        unreachable!()
+    }
+}
+
+#[cfg(feature = "admission")]
+#[tonic::async_trait]
+impl ConversionService for NoopService {
+    type Error = Infallible;
+    async fn convert_objects(
+        &self,
+        _request: ConversionRequest<Self>,
+    ) -> Result<ConversionResponse, Self::Error> {
+        unreachable!()
+    }
+}

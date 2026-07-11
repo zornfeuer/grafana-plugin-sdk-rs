@@ -5,14 +5,14 @@ error[E0277]: the trait bound `MyPlugin: DataService` is not satisfied
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `DataService` is not implemented for `MyPlugin`
    |
    = help: the trait `DataService` is implemented for `backend::noop::NoopService`
-note: required by a bound in `grafana_plugin_sdk::backend::Plugin::<D, Q, R, S>::data_service`
+note: required by a bound in `grafana_plugin_sdk::backend::Plugin::<D, Q, R, S, A, C>::data_service`
   --> $WORKSPACE/crates/grafana-plugin-sdk-rs/src/backend/mod.rs
    |
-   |     pub fn data_service<T>(self, service: T) -> Plugin<D, T, R, S>
+   |     pub fn data_service<T>(self, service: T) -> Plugin<D, T, R, S, A, C>
    |            ------------ required by a bound in this associated function
    |     where
    |         T: DataService + Send + Sync + 'static,
-   |            ^^^^^^^^^^^ required by this bound in `Plugin::<D, Q, R, S>::data_service`
+   |            ^^^^^^^^^^^ required by this bound in `Plugin::<D, Q, R, S, A, C>::data_service`
    = note: this error originates in the attribute macro `grafana_plugin_sdk::main` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error[E0599]: the method `start` exists for struct `Plugin<NoopService, MyPlugin, NoopService, NoopService>`, but its trait bounds were not satisfied

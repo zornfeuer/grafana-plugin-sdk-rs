@@ -100,9 +100,21 @@ impl Configuration {
                 }
                 cfg_services.stream = true;
                 Ok(())
+            } else if meta.path.is_ident("admission") {
+                if cfg_services.admission {
+                    return Err(meta.error("`admission` set multiple times."));
+                }
+                cfg_services.admission = true;
+                Ok(())
+            } else if meta.path.is_ident("conversion") {
+                if cfg_services.conversion {
+                    return Err(meta.error("`conversion` set multiple times."));
+                }
+                cfg_services.conversion = true;
+                Ok(())
             } else {
                 Err(meta.error(
-                    "Unknown service. Only `data`, `diagnostics`, `resource` and `stream` are supported.",
+                    "Unknown service. Only `data`, `diagnostics`, `resource`, `stream`, `admission` and `conversion` are supported.",
                 ))
             }
         })?;
@@ -110,6 +122,8 @@ impl Configuration {
             && !cfg_services.diagnostics
             && !cfg_services.resource
             && !cfg_services.stream
+            && !cfg_services.admission
+            && !cfg_services.conversion
         {
             return Err(meta.error("At least one service must be specified in `services`."));
         }
@@ -206,6 +220,8 @@ struct Services {
     data: bool,
     diagnostics: bool,
     resource: bool,
+    admission: bool,
+    conversion: bool,
 }
 
 #[derive(Default)]
@@ -222,6 +238,8 @@ const DEFAULT_ERROR_CONFIG: FinalConfig = FinalConfig {
         data: false,
         diagnostics: false,
         resource: false,
+        admission: false,
+        conversion: false,
     },
     init_subscriber: false,
     shutdown_handler: None,
@@ -262,6 +280,12 @@ fn parse_knobs(input: syn::ItemFn, config: FinalConfig) -> TokenStream {
     }
     if config.services.stream {
         plugin = quote! { #plugin.stream_service(std::clone::Clone::clone(&service)) };
+    }
+    if config.services.admission {
+        plugin = quote! { #plugin.admission_service(std::clone::Clone::clone(&service)) };
+    }
+    if config.services.conversion {
+        plugin = quote! { #plugin.conversion_service(std::clone::Clone::clone(&service)) };
     }
     let init_subscriber = config.init_subscriber;
     if init_subscriber {
