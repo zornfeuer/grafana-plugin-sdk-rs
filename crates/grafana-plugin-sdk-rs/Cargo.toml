@@ -19,7 +19,7 @@ documentation = "https://docs.rs/grafana-plugin-sdk-rs"
 name = "grafana_plugin_sdk"
 
 [dependencies]
-grafana-plugin-sdk-rs-macros = { version = "0.2.0", path = "../grafana-plugin-sdk-rs-macros" }
+grafana-plugin-sdk-rs-macros = { version = "0.3.0", path = "../grafana-plugin-sdk-rs-macros" }
 
 # --- Lean core (always compiled) ---
 cfg-if = "1.0.0"

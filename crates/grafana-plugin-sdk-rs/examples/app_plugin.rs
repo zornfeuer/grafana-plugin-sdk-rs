@@ -153,7 +153,7 @@ Bundling this as a Grafana app plugin
            "id": "rust-sdk-poc-app",
            "backend": true,
            "executable": "gpx_poc_app",
-           "info": { "version": "0.1.0", "updated": "2026-07-11" },
+           "info": { "version": "0.3.0", "updated": "2026-07-12" },
            "dependencies": { "grafanaDependency": ">=10.0.0" }
          }
 

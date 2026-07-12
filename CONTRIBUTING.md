@@ -19,10 +19,10 @@ Run the same checks CI runs:
 ```sh
 cargo fmt --all --check
 cargo clippy --all-targets -- -D warnings
-cargo clippy --all-targets --features data,stream,reqwest,httpadapter,automtls -- -D warnings
+cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test -p grafana-plugin-sdk-rs
-cargo test --workspace --features data,stream,reqwest,httpadapter,automtls
-RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --features data,stream,reqwest,httpadapter,automtls
+cargo test --workspace --all-features
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features
 ```
 
 The `automtls` feature builds `aws-lc-rs`, which requires a C compiler and `cmake`.

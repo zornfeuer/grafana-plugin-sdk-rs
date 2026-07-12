@@ -35,7 +35,7 @@ in the stack.
 
 ```toml
 [dependencies]
-grafana-plugin-sdk-rs = { version = "0.2", features = ["httpadapter", "automtls"] }
+grafana-plugin-sdk-rs = { version = "0.3", features = ["httpadapter", "automtls"] }
 axum = "0.8"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
@@ -118,9 +118,11 @@ Working towards feature parity with the Go SDK, roughly in priority order:
 - [x] Automatic mTLS, instance management, `GrafanaConfig`/feature toggles, `httpclient`, build info
 - [x] Admission control & resource conversion services (`admission` feature)
 - [x] `Data.QueryChunkedData` (chunked query responses, derived from `query_data`)
+- [x] Production lifecycle/observability: early hclog, graceful shutdown, Prometheus helper, subprocess harness
 - [ ] OpenTelemetry trace-context propagation across the gRPC boundary
 - [ ] Fuller `httpclient` middleware; datasource instance-management helpers
-- [ ] Hygiene: `cargo-deny`, a CI toolchain matrix, more examples (datasource, streaming)
+- [x] Hygiene: `cargo-deny`, MSRV/stable CI matrix, vendored protobuf generation
+- [ ] More examples (datasource, streaming)
 
 Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 

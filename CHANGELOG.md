@@ -6,7 +6,26 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-12
+
+### Added
+
+- `backend::init_hclog_subscriber()` for idempotent Grafana-compatible logging
+  before plugin-specific bootstrap work.
+- `backend::ShutdownToken` and `Plugin::shutdown_token()` for coordinated gRPC,
+  background-task, SIGINT, and SIGTERM shutdown.
+- Optional `prometheus` feature with
+  `CollectMetricsResponse::from_prometheus_registry()`.
+- A documented sidecar HTTP-listener pattern sharing the plugin shutdown token.
+- A subprocess integration harness covering the go-plugin handshake,
+  `CheckHealth`, streaming `CallResource`, background workers, and graceful exit.
+
 ### Changed
+
+- `gen-proto` now supplies a vendored `protoc`, so standard all-features builds
+  do not depend on a system installation.
+- Quickstart, app-plugin example, feature documentation, and CI cache keys were
+  updated for the current workspace layout and release.
 
 - Dropped two unmaintained dependencies (flagged by `cargo-deny`): `rustls-pemfile`
   (the `automtls` PEM parsing now uses `rustls-pki-types`' `PemObject`) and, in
@@ -66,6 +85,7 @@ on the surface a resource/health app plugin needs.
 - Forked from [`grafana-plugin-sdk-rust`](https://github.com/grafana/grafana-plugin-sdk-rust)
   by Ben Sully, dual-licensed MIT/Apache-2.0. See [NOTICE](NOTICE).
 
-[Unreleased]: https://gitlab.com/zornfeuer/grafana-plugin-sdk-rs/-/compare/v0.2.0...main
+[Unreleased]: https://gitlab.com/zornfeuer/grafana-plugin-sdk-rs/-/compare/v0.3.0...main
+[0.3.0]: https://gitlab.com/zornfeuer/grafana-plugin-sdk-rs/-/compare/v0.2.0...v0.3.0
 [0.2.0]: https://gitlab.com/zornfeuer/grafana-plugin-sdk-rs/-/compare/v0.1.0...v0.2.0
 [0.1.0]: https://gitlab.com/zornfeuer/grafana-plugin-sdk-rs/-/tags/v0.1.0
