@@ -81,6 +81,7 @@ tokio = { version = "1.38.2", features = ["rt-multi-thread", "macros", "io-util"
 tokio-stream = "0.1.14"
 
 [build-dependencies]
+protoc-bin-vendored = { version = "3", optional = true }
 tonic-prost-build = { version = "0.14.2", optional = true }
 
 # The bundled example demonstrates data + streaming, so it only builds when those
@@ -123,14 +124,12 @@ automtls = [
 reqwest = ["dep:reqwest_lib", "dep:base64"]
 # Encode a `prometheus::Registry` directly into Grafana's CollectMetrics response.
 prometheus = ["dep:prometheus"]
-# Regenerate the protobuf bindings at build time instead of using the checked-in
-# code. Requires `protoc` to be installed.
-gen-proto = ["dep:tonic-prost-build"]
+# Regenerate the protobuf bindings using a vendored `protoc` binary.
+gen-proto = ["dep:protoc-bin-vendored", "dep:tonic-prost-build"]
 
 # docs.rs-specific configuration
 [package.metadata.docs.rs]
-# Document the functional features, but NOT `gen-proto` (which shells out to
-# `protoc` at build time and would fail in the docs.rs sandbox).
-features = ["data", "stream", "reqwest", "httpadapter", "automtls", "admission"]
+# Document the functional features, but skip the build-only `gen-proto` feature.
+features = ["data", "stream", "reqwest", "httpadapter", "automtls", "admission", "prometheus"]
 # defines the configuration attribute `docsrs`
 rustdoc-args = ["--cfg", "docsrs"]

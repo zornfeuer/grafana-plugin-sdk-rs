@@ -38,7 +38,7 @@ Notes:
 ## Protocol changes
 
 The `pluginv2` bindings are generated from `crates/grafana-plugin-sdk-rs/vendor/proto/backend.proto`
-and checked in. Regenerate them with the `gen-proto` feature (requires `protoc`):
+and checked in. Regenerate them with the `gen-proto` feature (which supplies `protoc`):
 
 ```sh
 cargo build -p grafana-plugin-sdk-rs --features gen-proto

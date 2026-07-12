@@ -35,7 +35,7 @@ in the stack.
 
 ```toml
 [dependencies]
-grafana-plugin-sdk-rs = { version = "0.1", features = ["httpadapter", "automtls"] }
+grafana-plugin-sdk-rs = { version = "0.2", features = ["httpadapter", "automtls"] }
 axum = "0.8"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
@@ -104,7 +104,7 @@ instance, so custom caches can use the same inexpensive invalidation key.
 | `data`        |         | Dataframes (`Frame`/`Field`), `QueryData`/`DataService`, Arrow IPC. Pulls in Apache Arrow. |
 | `stream`      |         | Grafana Live `StreamService` (implies `data`). |
 | `admission`   |         | Kubernetes-style admission control and resource conversion services (experimental). |
-| `gen-proto`   |         | Regenerate protobuf bindings at build time (requires `protoc`). |
+| `gen-proto`   |         | Regenerate protobuf bindings with a vendored `protoc`. |
 
 > A plugin talking to a real Grafana almost always wants `automtls` +
 > `httpadapter`. `data`/`stream` (and their Apache Arrow dependency) stay out of

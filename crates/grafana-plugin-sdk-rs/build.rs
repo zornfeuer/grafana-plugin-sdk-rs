@@ -2,6 +2,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "gen-proto")]
     {
         let mut config = tonic_prost_build::Config::new();
+        config.protoc_executable(protoc_bin_vendored::protoc_bin_path()?);
         config.bytes([
             ".pluginv2.CallResourceRequest",
             ".pluginv2.CallResourceResponse",

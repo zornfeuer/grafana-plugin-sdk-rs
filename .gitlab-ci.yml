@@ -32,6 +32,7 @@ variables:
     files:
       - Cargo.toml
       - crates/grafana-plugin-sdk-rs/Cargo.toml
+      - crates/grafana-plugin-sdk-rs-macros/Cargo.toml
   paths:
     - .cargo/registry/index
     - .cargo/registry/cache

@@ -53,7 +53,7 @@ version) from its Cargo metadata.
   [`IntoHttpResponse`][backend::IntoHttpResponse] implementation for `reqwest::Response`.
 - `prometheus` — encodes a `prometheus::Registry` directly into
   [`CollectMetricsResponse`][backend::CollectMetricsResponse].
-- `gen-proto` — regenerate the protobuf bindings at build time (requires `protoc`).
+- `gen-proto` — regenerate the protobuf bindings using a vendored `protoc` binary.
 
 [hclog]: https://github.com/hashicorp/go-hclog
 
