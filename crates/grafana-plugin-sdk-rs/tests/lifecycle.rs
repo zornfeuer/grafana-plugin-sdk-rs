@@ -184,10 +184,12 @@ async fn subprocess_handshake_grpc_and_shutdown() {
 
     let channel = connect_with_retry(endpoint).await;
     let mut diagnostics = pluginv2::diagnostics_client::DiagnosticsClient::new(channel.clone());
-    let mut health_request = tonic::Request::new(pluginv2::CheckHealthRequest {
+    let health_request = tonic::Request::new(pluginv2::CheckHealthRequest {
         plugin_context: Some(plugin_context()),
         headers: Default::default(),
     });
+    #[cfg(feature = "opentelemetry")]
+    let mut health_request = health_request;
     #[cfg(feature = "opentelemetry")]
     health_request.metadata_mut().insert(
         "traceparent",
