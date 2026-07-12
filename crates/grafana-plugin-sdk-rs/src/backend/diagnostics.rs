@@ -258,6 +258,20 @@ impl CollectMetricsResponse {
     pub fn new(metrics: Option<Payload>) -> Self {
         Self { metrics }
     }
+
+    /// Gather and encode a Prometheus registry for Grafana's metrics endpoint.
+    ///
+    /// Only available with the `prometheus` feature.
+    #[cfg(feature = "prometheus")]
+    pub fn from_prometheus_registry(
+        registry: &prometheus::Registry,
+    ) -> Result<Self, prometheus::Error> {
+        use prometheus::Encoder as _;
+
+        let mut buffer = Vec::new();
+        prometheus::TextEncoder::new().encode(&registry.gather(), &mut buffer)?;
+        Ok(Self::new(Some(Payload::prometheus(buffer))))
+    }
 }
 
 impl From<CollectMetricsResponse> for pluginv2::CollectMetricsResponse {
@@ -282,12 +296,14 @@ impl From<CollectMetricsResponse> for pluginv2::CollectMetricsResponse {
 ///
 /// ```rust
 /// use grafana_plugin_sdk::{backend, prelude::*};
-/// use prometheus::{Encoder, TextEncoder};
+/// # #[cfg(feature = "prometheus")]
+/// # {
+/// use prometheus::Registry;
 ///
 /// #[derive(Clone, Debug, GrafanaPlugin)]
 /// #[grafana_plugin(plugin_type = "app")]
 /// struct MyPlugin {
-///     metrics: prometheus::Registry,
+///     metrics: Registry,
 /// }
 ///
 /// #[backend::async_trait]
@@ -309,12 +325,10 @@ impl From<CollectMetricsResponse> for pluginv2::CollectMetricsResponse {
 ///         &self,
 ///         request: backend::CollectMetricsRequest<Self>,
 ///     ) -> Result<backend::CollectMetricsResponse, Self::CollectMetricsError> {
-///         let mut buffer = vec![];
-///         let encoder = TextEncoder::new();
-///         encoder.encode(&self.metrics.gather(), &mut buffer)?;
-///         Ok(backend::CollectMetricsResponse::new(Some(backend::MetricsPayload::prometheus(buffer))))
+///         backend::CollectMetricsResponse::from_prometheus_registry(&self.metrics)
 ///     }
 /// }
+/// # }
 /// ```
 #[tonic::async_trait]
 pub trait DiagnosticsService: GrafanaPlugin {
@@ -382,5 +396,26 @@ where
             .await
             .map_err(|e| tonic::Status::internal(e.to_string()))?;
         Ok(tonic::Response::new(response.into()))
+    }
+}
+
+#[cfg(all(test, feature = "prometheus"))]
+mod tests {
+    use prometheus::{IntCounter, Registry};
+
+    use super::CollectMetricsResponse;
+
+    #[test]
+    fn encodes_prometheus_registry() {
+        let registry = Registry::new();
+        let counter = IntCounter::new("requests_total", "Handled requests").unwrap();
+        registry.register(Box::new(counter.clone())).unwrap();
+        counter.inc_by(3);
+
+        let response = CollectMetricsResponse::from_prometheus_registry(&registry).unwrap();
+        let payload = String::from_utf8(response.metrics.unwrap().prometheus).unwrap();
+
+        assert!(payload.contains("# HELP requests_total Handled requests"));
+        assert!(payload.contains("requests_total 3"));
     }
 }

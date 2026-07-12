@@ -51,6 +51,8 @@ version) from its Cargo metadata.
   `CallResource` requests by running them through an `axum::Router`.
 - `reqwest` — adds the `httpclient` module and an
   [`IntoHttpResponse`][backend::IntoHttpResponse] implementation for `reqwest::Response`.
+- `prometheus` — encodes a `prometheus::Registry` directly into
+  [`CollectMetricsResponse`][backend::CollectMetricsResponse].
 - `gen-proto` — regenerate the protobuf bindings at build time (requires `protoc`).
 
 [hclog]: https://github.com/hashicorp/go-hclog

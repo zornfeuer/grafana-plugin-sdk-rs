@@ -75,6 +75,23 @@ cargo run --example app_plugin --features httpadapter,automtls
 The crate is published as `grafana-plugin-sdk-rs` and imported as
 `grafana_plugin_sdk`.
 
+## Background tasks and additional listeners
+
+Pass a shared `backend::ShutdownToken` to `Plugin::shutdown_token` and clone it
+into workers or an additional `axum::serve` task. Cancelling the token, SIGINT,
+or SIGTERM gracefully stops the gRPC server and wakes every task waiting on
+`ShutdownToken::cancelled`. The runnable
+[`app_plugin` example](crates/grafana-plugin-sdk-rs/examples/app_plugin.rs)
+demonstrates both a background worker and an optional callback listener enabled
+with `PLUGIN_HTTP_ADDR=127.0.0.1:3001`.
+
+## Instance cache invalidation
+
+`AppInstanceSettings::updated` and `DataSourceInstanceSettings::updated` expose
+Grafana's configuration timestamp. `InstanceManager` compares this value (and
+`GrafanaConfig`) when deciding whether to dispose and recreate a cached plugin
+instance, so custom caches can use the same inexpensive invalidation key.
+
 ## Cargo features
 
 | Feature       | Default | Enables |
@@ -83,6 +100,7 @@ The crate is published as `grafana-plugin-sdk-rs` and imported as
 | `automtls`    |         | go-plugin automatic mTLS (needed for a stock Grafana). Pulls in `rustls`/`aws-lc-rs`. |
 | `httpadapter` |         | Serve `CallResource` through an `axum::Router`. |
 | `reqwest`     |         | The `httpclient` builder + `IntoHttpResponse` for `reqwest::Response`. |
+| `prometheus`  |         | Encode a `prometheus::Registry` directly into `CollectMetricsResponse`. |
 | `data`        |         | Dataframes (`Frame`/`Field`), `QueryData`/`DataService`, Arrow IPC. Pulls in Apache Arrow. |
 | `stream`      |         | Grafana Live `StreamService` (implies `data`). |
 | `admission`   |         | Kubernetes-style admission control and resource conversion services (experimental). |

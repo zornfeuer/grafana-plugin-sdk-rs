@@ -96,6 +96,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     backend::init_hclog_subscriber()?;
 
     let shutdown = backend::ShutdownToken::new();
+    // App plugins may expose a separate TCP listener for callbacks that cannot
+    // enter through Grafana's authenticated CallResource proxy. Set
+    // PLUGIN_HTTP_ADDR=127.0.0.1:3001 to enable this example listener.
+    if let Ok(address) = std::env::var("PLUGIN_HTTP_ADDR") {
+        let sidecar_listener = tokio::net::TcpListener::bind(&address).await?;
+        let sidecar_shutdown = shutdown.clone();
+        let sidecar_router = Router::new().route("/webhook", get(ping));
+        tokio::spawn(async move {
+            if let Err(error) = axum::serve(sidecar_listener, sidecar_router)
+                .with_graceful_shutdown(async move { sidecar_shutdown.cancelled().await })
+                .await
+            {
+                tracing::error!(%error, "sidecar HTTP listener stopped");
+            }
+        });
+    }
+
     let worker_shutdown = shutdown.clone();
     tokio::spawn(async move {
         worker_shutdown.cancelled().await;
