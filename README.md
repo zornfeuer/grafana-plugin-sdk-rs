@@ -35,7 +35,7 @@ in the stack.
 
 ```toml
 [dependencies]
-grafana-plugin-sdk-rs = { version = "0.3", features = ["httpadapter", "automtls"] }
+grafana-plugin-sdk-rs = { version = "0.4", features = ["httpadapter", "automtls"] }
 axum = "0.8"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
@@ -101,6 +101,7 @@ instance, so custom caches can use the same inexpensive invalidation key.
 | `httpadapter` |         | Serve `CallResource` through an `axum::Router`. |
 | `reqwest`     |         | The `httpclient` builder + `IntoHttpResponse` for `reqwest::Response`. |
 | `prometheus`  |         | Encode a `prometheus::Registry` directly into `CollectMetricsResponse`. |
+| `opentelemetry` |       | Continue Grafana traces by extracting context from incoming gRPC metadata. |
 | `data`        |         | Dataframes (`Frame`/`Field`), `QueryData`/`DataService`, Arrow IPC. Pulls in Apache Arrow. |
 | `stream`      |         | Grafana Live `StreamService` (implies `data`). |
 | `admission`   |         | Kubernetes-style admission control and resource conversion services (experimental). |
@@ -109,6 +110,28 @@ instance, so custom caches can use the same inexpensive invalidation key.
 > A plugin talking to a real Grafana almost always wants `automtls` +
 > `httpadapter`. `data`/`stream` (and their Apache Arrow dependency) stay out of
 > the default build.
+
+## OpenTelemetry trace propagation
+
+Enable the `opentelemetry` feature to continue traces started by Grafana. The
+SDK extracts context from incoming gRPC metadata with OpenTelemetry's global
+`TextMapPropagator` and assigns it to the request span. Configure the propagator
+and a `tracing-opentelemetry` layer before starting the plugin; exporter and
+`TracerProvider` lifecycle remain under application control:
+
+```rust,ignore
+opentelemetry::global::set_text_map_propagator(
+    opentelemetry_sdk::propagation::TraceContextPropagator::new(),
+);
+let tracer = tracer_provider.tracer("my-plugin");
+tracing_subscriber::registry()
+    .with(grafana_plugin_sdk::backend::layer())
+    .with(tracing_opentelemetry::layer().with_tracer(tracer))
+    .init();
+```
+
+Grafana's current Go SDK uses OpenTelemetry gRPC instrumentation, so the carrier
+is gRPC metadata—not the `headers` field inside individual pluginv2 messages.
 
 ## Roadmap
 
@@ -119,7 +142,7 @@ Working towards feature parity with the Go SDK, roughly in priority order:
 - [x] Admission control & resource conversion services (`admission` feature)
 - [x] `Data.QueryChunkedData` (chunked query responses, derived from `query_data`)
 - [x] Production lifecycle/observability: early hclog, graceful shutdown, Prometheus helper, subprocess harness
-- [ ] OpenTelemetry trace-context propagation across the gRPC boundary
+- [x] OpenTelemetry trace-context propagation across the gRPC boundary
 - [ ] Fuller `httpclient` middleware; datasource instance-management helpers
 - [x] Hygiene: `cargo-deny`, MSRV/stable CI matrix, vendored protobuf generation
 - [ ] More examples (datasource, streaming)

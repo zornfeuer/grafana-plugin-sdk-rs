@@ -19,7 +19,7 @@ documentation = "https://docs.rs/grafana-plugin-sdk-rs"
 name = "grafana_plugin_sdk"
 
 [dependencies]
-grafana-plugin-sdk-rs-macros = { version = "0.3.0", path = "../grafana-plugin-sdk-rs-macros" }
+grafana-plugin-sdk-rs-macros = { version = "0.4.0", path = "../grafana-plugin-sdk-rs-macros" }
 
 # --- Lean core (always compiled) ---
 cfg-if = "1.0.0"
@@ -70,12 +70,15 @@ rcgen = { version = "0.13", default-features = false, features = ["aws_lc_rs", "
 base64 = { version = "0.22", optional = true }
 async-stream = { version = "0.3", optional = true }
 prometheus = { version = "0.14.0", default-features = false, optional = true }
+opentelemetry = { version = "0.32.0", default-features = false, features = ["trace"], optional = true }
+tracing-opentelemetry = { version = "0.33.0", default-features = false, optional = true }
 
 [dev-dependencies]
 async-stream = "0.3.5"
 bytes = "1.11.1"
 futures = "0.3.28"
 pastey = "0.1"
+opentelemetry_sdk = { version = "0.32.0", default-features = false, features = ["trace"] }
 pretty_assertions = "1.3.0"
 tokio = { version = "1.38.2", features = ["rt-multi-thread", "macros", "io-util", "net"] }
 tokio-stream = "0.1.14"
@@ -124,12 +127,15 @@ automtls = [
 reqwest = ["dep:reqwest_lib", "dep:base64"]
 # Encode a `prometheus::Registry` directly into Grafana's CollectMetrics response.
 prometheus = ["dep:prometheus"]
+# Extract OpenTelemetry trace context from Grafana's incoming gRPC metadata and
+# attach it to the tracing span created for each plugin request.
+opentelemetry = ["dep:opentelemetry", "dep:tracing-opentelemetry"]
 # Regenerate the protobuf bindings using a vendored `protoc` binary.
 gen-proto = ["dep:protoc-bin-vendored", "dep:tonic-prost-build"]
 
 # docs.rs-specific configuration
 [package.metadata.docs.rs]
 # Document the functional features, but skip the build-only `gen-proto` feature.
-features = ["data", "stream", "reqwest", "httpadapter", "automtls", "admission", "prometheus"]
+features = ["data", "stream", "reqwest", "httpadapter", "automtls", "admission", "prometheus", "opentelemetry"]
 # defines the configuration attribute `docsrs`
 rustdoc-args = ["--cfg", "docsrs"]

@@ -20,6 +20,12 @@ use grafana_plugin_sdk::{
     prelude::GrafanaPlugin,
 };
 use http::Response;
+#[cfg(feature = "opentelemetry")]
+use opentelemetry::trace::{TraceContextExt as _, TracerProvider as _};
+#[cfg(feature = "opentelemetry")]
+use tracing_opentelemetry::OpenTelemetrySpanExt as _;
+#[cfg(feature = "opentelemetry")]
+use tracing_subscriber::prelude::*;
 
 #[derive(Clone, Debug, GrafanaPlugin)]
 #[grafana_plugin(plugin_type = "app")]
@@ -35,9 +41,16 @@ impl DiagnosticsService for HarnessPlugin {
         &self,
         _request: CheckHealthRequest<Self>,
     ) -> Result<CheckHealthResponse, Self::CheckHealthError> {
-        Ok(CheckHealthResponse::ok(
-            "integration harness is healthy".into(),
-        ))
+        #[cfg(feature = "opentelemetry")]
+        let message = tracing::Span::current()
+            .context()
+            .span()
+            .span_context()
+            .trace_id()
+            .to_string();
+        #[cfg(not(feature = "opentelemetry"))]
+        let message = "integration harness is healthy".to_owned();
+        Ok(CheckHealthResponse::ok(message))
     }
 
     type CollectMetricsError = Infallible;
@@ -94,6 +107,19 @@ fn plugin_subprocess() {
     }
 
     grafana_plugin_sdk::async_main(async {
+        #[cfg(feature = "opentelemetry")]
+        let _tracer_provider = {
+            opentelemetry::global::set_text_map_propagator(
+                opentelemetry_sdk::propagation::TraceContextPropagator::new(),
+            );
+            let provider = opentelemetry_sdk::trace::SdkTracerProvider::builder().build();
+            let tracer = provider.tracer("grafana-sdk-lifecycle-test");
+            tracing_subscriber::registry()
+                .with(tracing_opentelemetry::layer().with_tracer(tracer))
+                .init();
+            provider
+        };
+
         let listener = backend::initialize().await.expect("initialize plugin");
         let shutdown = ShutdownToken::new();
         let worker_stopped = Arc::new(AtomicBool::new(false));
@@ -158,14 +184,25 @@ async fn subprocess_handshake_grpc_and_shutdown() {
 
     let channel = connect_with_retry(endpoint).await;
     let mut diagnostics = pluginv2::diagnostics_client::DiagnosticsClient::new(channel.clone());
+    let mut health_request = tonic::Request::new(pluginv2::CheckHealthRequest {
+        plugin_context: Some(plugin_context()),
+        headers: Default::default(),
+    });
+    #[cfg(feature = "opentelemetry")]
+    health_request.metadata_mut().insert(
+        "traceparent",
+        "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
+            .parse()
+            .unwrap(),
+    );
     let health = diagnostics
-        .check_health(pluginv2::CheckHealthRequest {
-            plugin_context: Some(plugin_context()),
-            headers: Default::default(),
-        })
+        .check_health(health_request)
         .await
         .expect("CheckHealth RPC")
         .into_inner();
+    #[cfg(feature = "opentelemetry")]
+    assert_eq!(health.message, "0af7651916cd43dd8448eb211c80319c");
+    #[cfg(not(feature = "opentelemetry"))]
     assert_eq!(health.message, "integration harness is healthy");
 
     let mut resources = pluginv2::resource_client::ResourceClient::new(channel);

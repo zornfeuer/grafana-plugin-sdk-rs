@@ -6,6 +6,16 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-13
+
+### Added
+
+- Optional `opentelemetry` feature: incoming gRPC metadata is extracted through
+  the global OpenTelemetry propagator and attached as the parent of every plugin
+  request span. W3C, Jaeger, and composite formats remain application-selected.
+- Unit and subprocess integration coverage for W3C `traceparent`/`tracestate`
+  propagation, including invalid-context handling.
+
 ## [0.3.0] - 2026-07-12
 
 ### Added
@@ -85,7 +95,8 @@ on the surface a resource/health app plugin needs.
 - Forked from [`grafana-plugin-sdk-rust`](https://github.com/grafana/grafana-plugin-sdk-rust)
   by Ben Sully, dual-licensed MIT/Apache-2.0. See [NOTICE](NOTICE).
 
-[Unreleased]: https://gitlab.com/zornfeuer/grafana-plugin-sdk-rs/-/compare/v0.3.0...main
+[Unreleased]: https://gitlab.com/zornfeuer/grafana-plugin-sdk-rs/-/compare/v0.4.0...main
+[0.4.0]: https://gitlab.com/zornfeuer/grafana-plugin-sdk-rs/-/compare/v0.3.0...v0.4.0
 [0.3.0]: https://gitlab.com/zornfeuer/grafana-plugin-sdk-rs/-/compare/v0.2.0...v0.3.0
 [0.2.0]: https://gitlab.com/zornfeuer/grafana-plugin-sdk-rs/-/compare/v0.1.0...v0.2.0
 [0.1.0]: https://gitlab.com/zornfeuer/grafana-plugin-sdk-rs/-/tags/v0.1.0

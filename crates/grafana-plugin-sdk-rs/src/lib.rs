@@ -53,6 +53,8 @@ version) from its Cargo metadata.
   [`IntoHttpResponse`][backend::IntoHttpResponse] implementation for `reqwest::Response`.
 - `prometheus` — encodes a `prometheus::Registry` directly into
   [`CollectMetricsResponse`][backend::CollectMetricsResponse].
+- `opentelemetry` — extracts distributed trace context from Grafana's incoming
+  gRPC metadata and attaches it to each request's `tracing` span.
 - `gen-proto` — regenerate the protobuf bindings using a vendored `protoc` binary.
 
 [hclog]: https://github.com/hashicorp/go-hclog

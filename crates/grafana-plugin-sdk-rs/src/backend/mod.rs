@@ -182,6 +182,8 @@ mod instance;
 #[cfg(feature = "automtls")]
 mod mtls;
 mod noop;
+#[cfg(feature = "opentelemetry")]
+mod otel;
 mod resource;
 #[cfg(feature = "stream")]
 mod stream;
@@ -692,7 +694,17 @@ where
         );
         #[allow(unused_mut)]
         let mut router = tonic::transport::Server::builder()
-            .trace_fn(|_| tracing::debug_span!("grafana-plugin-sdk"))
+            .trace_fn(|_request| {
+                #[cfg(feature = "opentelemetry")]
+                // Keep the request span enabled under the SDK's default `info`
+                // filter; a filtered span cannot carry an OpenTelemetry parent.
+                let span = tracing::info_span!("grafana-plugin-sdk");
+                #[cfg(not(feature = "opentelemetry"))]
+                let span = tracing::debug_span!("grafana-plugin-sdk");
+                #[cfg(feature = "opentelemetry")]
+                otel::set_parent_from_headers(&span, _request.headers());
+                span
+            })
             .add_service(health_service)
             .add_optional_service(self.diagnostics_service.map(DiagnosticsServer::new))
             .add_optional_service(self.resource_service.map(ResourceServer::new));

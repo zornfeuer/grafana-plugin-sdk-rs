@@ -20,7 +20,7 @@ variables:
   CARGO_NET_RETRY: "5"
   CARGO_TERM_COLOR: "always"
   RUST_BACKTRACE: "1"
-  FEATURES: "data,stream,reqwest,httpadapter,automtls,admission,prometheus"
+  FEATURES: "data,stream,reqwest,httpadapter,automtls,admission,prometheus,opentelemetry"
   RUSTC_WRAPPER: "sccache"
   SCCACHE_DIR: $CI_PROJECT_DIR/.sccache
   CI_IMAGE: $CI_REGISTRY_IMAGE/ci:latest
@@ -112,7 +112,7 @@ test:lean:
   stage: ci
   script:
     - cargo test -p grafana-plugin-sdk-rs
-    - "! cargo tree -p grafana-plugin-sdk-rs | grep -qi arrow"
+    - "! cargo tree -p grafana-plugin-sdk-rs --edges normal,build | grep -Eqi 'arrow|opentelemetry|tracing-opentelemetry'"
 
 # Full test suite across the MSRV (1.88, the image default) and the latest stable
 # toolchain. Each toolchain keeps its own sccache to avoid a cross-job push race.
