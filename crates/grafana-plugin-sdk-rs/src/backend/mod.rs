@@ -128,7 +128,13 @@ async fn plugin() -> MyPlugin {
 [tonic]: https://github.com/hyperium/tonic
 */
 use std::{
-    collections::HashMap, fmt::Debug, io, marker::PhantomData, net::SocketAddr, str::FromStr,
+    collections::HashMap,
+    fmt::Debug,
+    io,
+    marker::PhantomData,
+    net::SocketAddr,
+    str::FromStr,
+    sync::{Mutex, OnceLock},
 };
 
 use chrono::prelude::*;
@@ -414,6 +420,7 @@ mod sealed {
 /// ```
 pub struct Plugin<D, Q, R, S, A = NoopService, C = NoopService> {
     shutdown_handler: Option<ShutdownHandler>,
+    shutdown_token: Option<ShutdownToken>,
     init_subscriber: bool,
 
     diagnostics_service: Option<D>,
@@ -430,6 +437,7 @@ impl Plugin<NoopService, NoopService, NoopService, NoopService, NoopService, Noo
     pub fn new() -> Self {
         Self {
             shutdown_handler: None,
+            shutdown_token: None,
             init_subscriber: false,
             diagnostics_service: None,
             data_service: None,
@@ -450,6 +458,17 @@ impl Default
 }
 
 impl<D, Q, R, S, A, C> Plugin<D, Q, R, S, A, C> {
+    /// Shut the plugin down gracefully when `token` is cancelled.
+    ///
+    /// Clone the same token into background tasks so they can finish in-flight
+    /// work and release resources when the plugin stops. While the plugin is
+    /// running, SIGINT and SIGTERM also cancel the token.
+    #[must_use]
+    pub fn shutdown_token(mut self, token: ShutdownToken) -> Self {
+        self.shutdown_token = Some(token);
+        self
+    }
+
     /// Add a shutdown handler to the plugin, listening on the specified address.
     ///
     /// The shutdown handler waits for a TCP connection on the specified address
@@ -504,6 +523,7 @@ impl<D, Q, R, S, A, C> Plugin<D, Q, R, S, A, C> {
         Plugin {
             data_service: Some(service),
             shutdown_handler: self.shutdown_handler,
+            shutdown_token: self.shutdown_token,
             init_subscriber: self.init_subscriber,
             diagnostics_service: self.diagnostics_service,
             resource_service: self.resource_service,
@@ -521,6 +541,7 @@ impl<D, Q, R, S, A, C> Plugin<D, Q, R, S, A, C> {
         Plugin {
             diagnostics_service: Some(service),
             shutdown_handler: self.shutdown_handler,
+            shutdown_token: self.shutdown_token,
             init_subscriber: self.init_subscriber,
             data_service: self.data_service,
             resource_service: self.resource_service,
@@ -538,6 +559,7 @@ impl<D, Q, R, S, A, C> Plugin<D, Q, R, S, A, C> {
         Plugin {
             resource_service: Some(service),
             shutdown_handler: self.shutdown_handler,
+            shutdown_token: self.shutdown_token,
             init_subscriber: self.init_subscriber,
             diagnostics_service: self.diagnostics_service,
             data_service: self.data_service,
@@ -558,6 +580,7 @@ impl<D, Q, R, S, A, C> Plugin<D, Q, R, S, A, C> {
         Plugin {
             stream_service: Some(service),
             shutdown_handler: self.shutdown_handler,
+            shutdown_token: self.shutdown_token,
             init_subscriber: self.init_subscriber,
             diagnostics_service: self.diagnostics_service,
             data_service: self.data_service,
@@ -578,6 +601,7 @@ impl<D, Q, R, S, A, C> Plugin<D, Q, R, S, A, C> {
         Plugin {
             admission_service: Some(service),
             shutdown_handler: self.shutdown_handler,
+            shutdown_token: self.shutdown_token,
             init_subscriber: self.init_subscriber,
             diagnostics_service: self.diagnostics_service,
             data_service: self.data_service,
@@ -598,6 +622,7 @@ impl<D, Q, R, S, A, C> Plugin<D, Q, R, S, A, C> {
         Plugin {
             conversion_service: Some(service),
             shutdown_handler: self.shutdown_handler,
+            shutdown_token: self.shutdown_token,
             init_subscriber: self.init_subscriber,
             diagnostics_service: self.diagnostics_service,
             data_service: self.data_service,
@@ -622,20 +647,9 @@ where
     /// This adds all of the configured services, spawns a shutdown handler
     /// (if configured), and blocks while the plugin runs.
     ///
-    /// # Panics
-    ///
-    /// This will panic if `init_subscriber(true)` has been set and another
-    /// global subscriber has already been installed. If you are initializing your
-    /// own `Subscriber`, you should instead use the [`layer`] function to add a
-    /// Grafana-compatible `tokio_subscriber::fmt::Layer` to your subscriber.
     pub async fn start(self, listener: TcpListener) -> Result<(), Error> {
         if self.init_subscriber {
-            let filter =
-                EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-            tracing_subscriber::registry()
-                .with(layer())
-                .with(filter)
-                .init();
+            init_hclog_subscriber()?;
         }
         let (health_reporter, health_service) = tonic_health::server::health_reporter();
         let mut plugins = Vec::with_capacity(5);
@@ -699,20 +713,29 @@ where
         }
         #[cfg(feature = "automtls")]
         let tls = mtls::SERVER_TLS.get().cloned().flatten();
-        if let Some(handler) = self.shutdown_handler {
-            let handler = handler.spawn();
+        let shutdown = match (self.shutdown_token, self.shutdown_handler) {
+            (Some(token), Some(handler)) => Some(Box::pin(async move {
+                tokio::select! {
+                    () = token.cancelled() => {},
+                    () = shutdown_from_os(token.clone()) => {},
+                    () = handler.spawn().map(|_| ()) => token.cancel(),
+                }
+            })
+                as std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>),
+            (Some(token), None) => Some(Box::pin(shutdown_from_os(token)) as _),
+            (None, Some(handler)) => Some(Box::pin(handler.spawn().map(|_| ())) as _),
+            (None, None) => None,
+        };
+        if let Some(shutdown) = shutdown {
             #[cfg(feature = "automtls")]
             if let Some(config) = tls {
                 router
-                    .serve_with_incoming_shutdown(
-                        mtls::tls_incoming(listener, config),
-                        handler.map(|_| ()),
-                    )
+                    .serve_with_incoming_shutdown(mtls::tls_incoming(listener, config), shutdown)
                     .await?;
                 return Ok(());
             }
             router
-                .serve_with_incoming_shutdown(TcpListenerStream::new(listener), handler.map(|_| ()))
+                .serve_with_incoming_shutdown(TcpListenerStream::new(listener), shutdown)
                 .await?;
         } else {
             #[cfg(feature = "automtls")]
@@ -788,9 +811,97 @@ pub async fn initialize() -> Result<TcpListener, io::Error> {
     Ok(listener)
 }
 
+/// A clonable cancellation signal shared by the plugin server and background tasks.
+#[derive(Clone, Debug)]
+pub struct ShutdownToken {
+    sender: tokio::sync::watch::Sender<bool>,
+}
+
+impl ShutdownToken {
+    /// Create a token in the running state.
+    #[must_use]
+    pub fn new() -> Self {
+        let (sender, _) = tokio::sync::watch::channel(false);
+        Self { sender }
+    }
+
+    /// Request graceful shutdown. Calling this more than once is harmless.
+    pub fn cancel(&self) {
+        self.sender.send_replace(true);
+    }
+
+    /// Return whether shutdown has already been requested.
+    #[must_use]
+    pub fn is_cancelled(&self) -> bool {
+        *self.sender.borrow()
+    }
+
+    /// Wait until shutdown is requested.
+    pub async fn cancelled(&self) {
+        let mut receiver = self.sender.subscribe();
+        if *receiver.borrow() {
+            return;
+        }
+        while receiver.changed().await.is_ok() {
+            if *receiver.borrow() {
+                return;
+            }
+        }
+    }
+}
+
+impl Default for ShutdownToken {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+async fn shutdown_from_os(token: ShutdownToken) {
+    #[cfg(unix)]
+    {
+        let mut terminate =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                .expect("install SIGTERM handler");
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {},
+            _ = terminate.recv() => {},
+            () = token.cancelled() => return,
+        }
+    }
+    #[cfg(not(unix))]
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => {},
+        () = token.cancelled() => return,
+    }
+    token.cancel();
+}
+
 const HCLOG_TIME_FORMAT: &[time::format_description::FormatItem] = time::macros::format_description!(
     "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:6]+00:00"
 );
+
+static HCLOG_SUBSCRIBER_INITIALIZED: OnceLock<()> = OnceLock::new();
+static HCLOG_SUBSCRIBER_INIT_LOCK: Mutex<()> = Mutex::new(());
+
+/// Install the default Grafana-compatible tracing subscriber.
+///
+/// Call this immediately after [`initialize`] and before plugin-specific
+/// bootstrap work if those early logs must be visible in Grafana. Repeated calls
+/// made through this function are harmless. An error is returned if a different
+/// global subscriber was installed first.
+pub fn init_hclog_subscriber() -> Result<(), tracing::subscriber::SetGlobalDefaultError> {
+    let _guard = HCLOG_SUBSCRIBER_INIT_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if HCLOG_SUBSCRIBER_INITIALIZED.get().is_some() {
+        return Ok(());
+    }
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let subscriber = tracing_subscriber::registry().with(layer()).with(filter);
+    tracing::subscriber::set_global_default(subscriber)?;
+    let _ = HCLOG_SUBSCRIBER_INITIALIZED.set(());
+    Ok(())
+}
 
 /// Create a `tracing` [`Layer`][tracing_subscriber::Layer] configured to log events in a format understood by Grafana.
 ///
@@ -822,6 +933,9 @@ pub fn layer<S: tracing::Subscriber + for<'a> LookupSpan<'a>>(
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum Error {
+    /// The default tracing subscriber could not be installed.
+    #[error("error initializing Grafana-compatible tracing: {0}")]
+    InitSubscriber(#[from] tracing::subscriber::SetGlobalDefaultError),
     /// An error occurred converting data from Grafana.
     #[error("error converting from Grafana: {0}")]
     ConvertFrom(#[from] ConvertFromError),
@@ -831,6 +945,24 @@ pub enum Error {
     /// An error occurred while starting the plugin.
     #[error("error serving plugin: {0}")]
     Serve(#[from] tonic::transport::Error),
+}
+
+#[cfg(test)]
+mod shutdown_tests {
+    use super::ShutdownToken;
+
+    #[tokio::test]
+    async fn cancellation_is_shared_and_idempotent() {
+        let token = ShutdownToken::new();
+        let observer = token.clone();
+
+        assert!(!observer.is_cancelled());
+        token.cancel();
+        token.cancel();
+        observer.cancelled().await;
+
+        assert!(observer.is_cancelled());
+    }
 }
 
 /// Errors occurring when trying to interpret data passed from Grafana to this SDK.

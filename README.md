@@ -50,8 +50,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Must run before anything else writes to stdout.
     let listener = backend::initialize().await?;
+    // Install hclog before plugin-specific bootstrap work so its logs are kept.
+    backend::init_hclog_subscriber()?;
+    let shutdown = backend::ShutdownToken::new();
+
     backend::Plugin::new()
         .resource_service(HttpResourceService::new(router))
+        .shutdown_token(shutdown)
         .init_subscriber(true)
         .start(listener)
         .await?;

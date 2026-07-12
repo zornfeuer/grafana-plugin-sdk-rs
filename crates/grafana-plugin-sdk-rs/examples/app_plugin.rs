@@ -91,11 +91,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // MUST come before anything else writes to stdout: prints the go-plugin
     // handshake line (and, under automatic mTLS, the server certificate).
     let listener = backend::initialize().await?;
+    // Install logging before database connections, migrations, and other
+    // bootstrap work so those events are visible in Grafana too.
+    backend::init_hclog_subscriber()?;
+
+    let shutdown = backend::ShutdownToken::new();
+    let worker_shutdown = shutdown.clone();
+    tokio::spawn(async move {
+        worker_shutdown.cancelled().await;
+        // Finish in-flight work and close pools here.
+    });
 
     backend::Plugin::new()
         .diagnostics_service(App)
         .resource_service(HttpResourceService::new(router))
-        // Emit hclog-formatted logs to stderr so Grafana can read them.
+        .shutdown_token(shutdown)
+        // Safe after the explicit early initialization above.
         .init_subscriber(true)
         .start(listener)
         .await?;

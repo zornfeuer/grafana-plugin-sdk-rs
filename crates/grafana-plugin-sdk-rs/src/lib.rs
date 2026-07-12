@@ -29,8 +29,9 @@ Grafana plugins.
 
 # Logging
 
-Emit logs with the [`tracing`] macros; install [`backend::layer`] (or
-[`Plugin::init_subscriber`][backend::Plugin::init_subscriber]) so they are written
+Emit logs with the [`tracing`] macros; install [`backend::layer`], call
+[`backend::init_hclog_subscriber`] before bootstrap work, or enable
+[`Plugin::init_subscriber`][backend::Plugin::init_subscriber] so they are written
 in the [hclog] format Grafana understands. This is the idiomatic replacement for
 the Go SDK's `backend/log` logger.
 
